@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { X, Mail, Send, Users, FileText, DollarSign } from 'lucide-react';
+import { Mail, Send, Users, FileText, DollarSign, X } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Project, BudgetEntry } from '../types';
 import { formatMYR } from '../utils/currency';
+import { supabase } from '../lib/supabase';
 
 interface EmailModalProps {
   project?: Project;
@@ -18,42 +19,58 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
     message: '',
     includeProjectDetails: true,
     includeBudgetSummary: true,
-    includeTransactions: true
+    includeTransactions: true,
   });
   const [isSending, setIsSending] = useState(false);
 
-  const projectUsers = project ? users.filter(user => 
-    project.assignedUsers.includes(user.id) || user.id === project.createdBy
-  ) : [];
+  const projectUsers = project
+    ? users.filter(user => project.assignedUsers.includes(user.id) || user.id === project.createdBy)
+    : [];
 
   const handleUserToggle = (userId: string) => {
     setFormData(prev => ({
       ...prev,
-      to: prev.to.includes(userId)
-        ? prev.to.filter(id => id !== userId)
-        : [...prev.to, userId]
+      to: prev.to.includes(userId) ? prev.to.filter(id => id !== userId) : [...prev.to, userId]
     }));
   };
 
   const handleSend = async () => {
     setIsSending(true);
-    
     try {
-      // Simulate email sending
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // In a real app, you would call your email service here
-      console.log('Email sent:', {
-        to: formData.to.map(id => users.find(u => u.id === id)?.email),
-        subject: formData.subject,
-        message: formData.message,
-        project,
-        budgetEntries
+      const emailContent = generateEmailContent();
+      const recipients = formData.to.map(id => users.find(u => u.id === id)?.email).filter(Boolean) as string[];
+
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: recipients,
+          subject: formData.subject,
+          content: emailContent,
+          from: currentUser?.email,
+          projectId: project?.id
+        }
       });
-      
+
+      if (error) throw error;
+
+      for (const userId of formData.to) {
+        await supabase.from('notifications').insert({
+          user_id: userId,
+          type: 'email_sent',
+          title: 'New Email Report',
+          message: `${currentUser?.name} sent you a report: ${formData.subject}`,
+          data: {
+            sender: currentUser?.id,
+            subject: formData.subject,
+            projectId: project?.id
+          },
+          read: false
+        });
+      }
+
       alert('Email sent successfully!');
       onClose();
     } catch (error) {
+      console.error('Failed to send email:', error);
       alert('Failed to send email. Please try again.');
     } finally {
       setIsSending(false);
@@ -62,7 +79,7 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
 
   const generateEmailContent = () => {
     let content = formData.message + '\n\n';
-    
+
     if (project && formData.includeProjectDetails) {
       content += `PROJECT DETAILS:\n`;
       content += `Name: ${project.name}\n`;
@@ -72,7 +89,7 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
       content += `Spent: ${formatMYR(project.spent)}\n`;
       content += `Remaining: ${formatMYR(project.budget - project.spent)}\n\n`;
     }
-    
+
     if (budgetEntries && formData.includeTransactions && budgetEntries.length > 0) {
       content += `RECENT TRANSACTIONS:\n`;
       budgetEntries.slice(0, 10).forEach(entry => {
@@ -80,25 +97,28 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
       });
       content += '\n';
     }
-    
+
     if (formData.includeBudgetSummary && budgetEntries) {
-      const totalExpenses = budgetEntries.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
-      const totalIncome = budgetEntries.filter(e => e.type === 'income').reduce((sum, e) => sum + e.amount, 0);
-      
+      const totalExpenses = budgetEntries
+        .filter(e => e.type === 'expense')
+        .reduce((sum, e) => sum + e.amount, 0);
+      const totalIncome = budgetEntries
+        .filter(e => e.type === 'income')
+        .reduce((sum, e) => sum + e.amount, 0);
+
       content += `BUDGET SUMMARY:\n`;
       content += `Total Expenses: ${formatMYR(totalExpenses)}\n`;
       content += `Total Income: ${formatMYR(totalIncome)}\n`;
       content += `Net: ${formatMYR(totalIncome - totalExpenses)}\n\n`;
     }
-    
+
     content += `Best regards,\n${currentUser?.name}\nPCR Tracker`;
-    
     return content;
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3">
@@ -119,15 +139,15 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
         <div className="p-6 space-y-6">
           {/* Recipients */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               <Users className="inline h-4 w-4 mr-1" />
               Recipients
             </label>
-            <div className="space-y-2 max-h-32 overflow-y-auto">
-              {(project ? projectUsers : users).map((user) => (
+            <div className="space-y-2">
+              {projectUsers.map(user => (
                 <label
                   key={user.id}
-                  className="flex items-center space-x-3 p-2 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                  className="flex items-center space-x-3 p-3 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   <input
                     type="checkbox"
@@ -135,14 +155,13 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
                     onChange={() => handleUserToggle(user.id)}
                     className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
                   />
-                  <div className="flex items-center space-x-2">
-                    <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs font-medium">{user.initials}</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
-                    </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {user.name}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {user.email}
+                    </p>
                   </div>
                 </label>
               ))}
@@ -157,86 +176,87 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
             <input
               type="text"
               value={formData.subject}
-              onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
+              onChange={e => setFormData(prev => ({ ...prev, subject: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="Enter email subject"
             />
           </div>
 
           {/* Message */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <FileText className="inline h-4 w-4 mr-1" />
               Message
             </label>
             <textarea
-              rows={6}
+              rows={4}
               value={formData.message}
-              onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
+              onChange={e => setFormData(prev => ({ ...prev, message: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               placeholder="Enter your message..."
             />
           </div>
 
-          {/* Include Options */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-              Include in Email
-            </label>
-            <div className="space-y-2">
-              {project && (
-                <label className="flex items-center space-x-3">
-                  <input
-                    type="checkbox"
-                    checked={formData.includeProjectDetails}
-                    onChange={(e) => setFormData(prev => ({ ...prev, includeProjectDetails: e.target.checked }))}
-                    className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-                  />
-                  <div className="flex items-center space-x-2">
-                    <FileText className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Project Details</span>
-                  </div>
-                </label>
-              )}
-              
-              <label className="flex items-center space-x-3">
+          {/* Options */}
+          <div className="space-y-3">
+            {project && (
+              <label className="flex items-center space-x-2">
                 <input
                   type="checkbox"
-                  checked={formData.includeBudgetSummary}
-                  onChange={(e) => setFormData(prev => ({ ...prev, includeBudgetSummary: e.target.checked }))}
+                  checked={formData.includeProjectDetails}
+                  onChange={e => setFormData(prev => ({ ...prev, includeProjectDetails: e.target.checked }))}
                   className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
                 />
-                <div className="flex items-center space-x-2">
-                  <DollarSign className="h-4 w-4 text-green-500" />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">Budget Summary</span>
-                </div>
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Include project details
+                </span>
               </label>
-              
-              {budgetEntries && budgetEntries.length > 0 && (
-                <label className="flex items-center space-x-3">
-                  <input
-                    type="checkbox"
-                    checked={formData.includeTransactions}
-                    onChange={(e) => setFormData(prev => ({ ...prev, includeTransactions: e.target.checked }))}
-                    className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
-                  />
-                  <div className="flex items-center space-x-2">
-                    <FileText className="h-4 w-4 text-purple-500" />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Recent Transactions</span>
-                  </div>
-                </label>
-              )}
-            </div>
+            )}
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={formData.includeBudgetSummary}
+                onChange={e => setFormData(prev => ({ ...prev, includeBudgetSummary: e.target.checked }))}
+                className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                Include budget summary
+              </span>
+            </label>
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={formData.includeTransactions}
+                onChange={e => setFormData(prev => ({ ...prev, includeTransactions: e.target.checked }))}
+                className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                Include recent transactions
+              </span>
+            </label>
           </div>
 
           {/* Preview */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <h4 className="text-sm font-medium text-blue-900 dark:text-blue-300 mb-2">
               Email Preview
-            </label>
-            <div className="p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg max-h-40 overflow-y-auto">
-              <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                {generateEmailContent()}
-              </pre>
+            </h4>
+            <div className="space-y-2 text-sm text-blue-800 dark:text-blue-400">
+              <p>To: {formData.to.length} recipient(s)</p>
+              <p>Subject: {formData.subject}</p>
+              <div className="border-t border-blue-200 dark:border-blue-700 mt-2 pt-2">
+                <p className="font-medium">Content will include:</p>
+                <ul className="mt-1 space-y-1">
+                  {formData.includeProjectDetails && project && (
+                    <li>• Project details and status</li>
+                  )}
+                  {formData.includeBudgetSummary && (
+                    <li>• Budget summary and analysis</li>
+                  )}
+                  {formData.includeTransactions && (
+                    <li>• Recent transactions (up to 10)</li>
+                  )}
+                </ul>
+              </div>
             </div>
           </div>
         </div>

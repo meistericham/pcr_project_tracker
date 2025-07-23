@@ -36,7 +36,7 @@ const AppContent = () => {
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <TopNavigation />
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto relative">
           {renderCurrentView()}
         </div>
       </div>
