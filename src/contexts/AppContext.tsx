@@ -1,32 +1,39 @@
-import React, { createContext, useContext, useState } from 'react';
-import { Project, BudgetCode, BudgetEntry, Notification, ViewMode, AppSettings } from '../types';
-import { supabase } from '../lib/supabase';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
+import { User, Project, BudgetEntry, BudgetCode, ViewMode, AppSettings, Notification } from '../types';
 
 interface AppContextType {
-  currentView: ViewMode;
-  setCurrentView: (view: ViewMode) => void;
+  users: User[];
   projects: Project[];
-  budgetCodes: BudgetCode[];
   budgetEntries: BudgetEntry[];
+  budgetCodes: BudgetCode[];
   notifications: Notification[];
   settings: AppSettings;
-  addProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
-  updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
-  deleteProject: (id: string) => Promise<void>;
-  addBudgetCode: (code: Omit<BudgetCode, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
-  updateBudgetCode: (id: string, updates: Partial<BudgetCode>) => Promise<void>;
-  deleteBudgetCode: (id: string) => Promise<void>;
-  toggleBudgetCodeStatus: (id: string) => Promise<void>;
-  addBudgetEntry: (entry: Omit<BudgetEntry, 'id' | 'createdAt'>) => Promise<void>;
-  updateBudgetEntry: (id: string, updates: Partial<BudgetEntry>) => Promise<void>;
-  deleteBudgetEntry: (id: string) => Promise<void>;
-  getUnreadNotificationCount: () => number;
-  markNotificationAsRead: (id: string) => Promise<void>;
-  markAllNotificationsAsRead: () => Promise<void>;
-  deleteNotification: (id: string) => Promise<void>;
-  users: any[];
+  currentView: ViewMode;
+  selectedProject: Project | null;
   sidebarCollapsed: boolean;
+  setCurrentView: (view: ViewMode) => void;
+  setSelectedProject: (project: Project | null) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  addProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  updateProject: (id: string, updates: Partial<Project>) => void;
+  deleteProject: (id: string) => void;
+  addBudgetEntry: (entry: Omit<BudgetEntry, 'id' | 'createdAt'>) => void;
+  updateBudgetEntry: (id: string, updates: Partial<BudgetEntry>) => void;
+  deleteBudgetEntry: (id: string) => void;
+  addUser: (user: Omit<User, 'id' | 'createdAt'>) => void;
+  updateUser: (id: string, updates: Partial<User>) => void;
+  deleteUser: (id: string) => void;
+  addBudgetCode: (code: Omit<BudgetCode, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  updateBudgetCode: (id: string, updates: Partial<BudgetCode>) => void;
+  deleteBudgetCode: (id: string) => void;
+  toggleBudgetCodeStatus: (id: string) => void;
+  updateSettings: (settings: Partial<AppSettings>) => void;
+  addNotification: (notification: Omit<Notification, 'id' | 'createdAt'>) => void;
+  markNotificationAsRead: (id: string) => void;
+  markAllNotificationsAsRead: () => void;
+  deleteNotification: (id: string) => void;
+  getUnreadNotificationCount: () => number;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -39,159 +46,778 @@ export const useApp = () => {
   return context;
 };
 
+// Storage keys
+const STORAGE_KEYS = {
+  USERS: 'pcr_users',
+  PROJECTS: 'pcr_projects',
+  BUDGET_ENTRIES: 'pcr_budget_entries',
+  BUDGET_CODES: 'pcr_budget_codes',
+  NOTIFICATIONS: 'pcr_notifications',
+  SETTINGS: 'pcr_settings'
+};
+
+// Helper functions for localStorage
+const saveToStorage = (key: string, data: any) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (error) {
+    console.error('Failed to save to localStorage:', error);
+  }
+};
+
+const loadFromStorage = (key: string, defaultValue: any) => {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : defaultValue;
+  } catch (error) {
+    console.error('Failed to load from localStorage:', error);
+    return defaultValue;
+  }
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser } = useAuth();
   const [currentView, setCurrentView] = useState<ViewMode>('projects');
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [budgetCodes, setBudgetCodes] = useState<BudgetCode[]>([]);
-  const [budgetEntries, setBudgetEntries] = useState<BudgetEntry[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const [settings] = useState<AppSettings>({
+  // Default settings
+  const defaultSettings: AppSettings = {
     currency: 'MYR',
     dateFormat: 'DD/MM/YYYY',
-    budgetAlertThreshold: 75,
-    theme: 'system',
-    smtpHost: '',
-    smtpPort: 587,
-    smtpSecurity: 'tls',
-    smtpUsername: '',
-    smtpPassword: '',
-    smtpFromEmail: ''
-  });
-
-  // Project operations
-  const addProject = async (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const { data, error } = await supabase.from('projects').insert([project]).select();
-    if (error) throw error;
-    setProjects([...projects, data[0]]);
+    fiscalYearStart: 1, // January
+    budgetAlertThreshold: 80,
+    autoBackup: true,
+    emailNotifications: true,
+    companyName: 'PCR Company',
+    defaultProjectStatus: 'planning',
+    defaultProjectPriority: 'medium',
+    budgetCategories: [
+      'Design', 'Development', 'Marketing', 'Software', 'Research',
+      'Advertising', 'Equipment', 'Travel', 'Training', 'Other'
+    ],
+    maxProjectDuration: 365,
+    requireBudgetApproval: false,
+    allowNegativeBudget: false
   };
 
-  const updateProject = async (id: string, updates: Partial<Project>) => {
-    const { data, error } = await supabase
-      .from('projects')
-      .update(updates)
-      .eq('id', id)
-      .select();
-    if (error) throw error;
-    setProjects(projects.map(p => p.id === id ? { ...p, ...updates } : p));
+  // Default initial data
+  const defaultUsers: User[] = [
+    {
+      id: '1',
+      name: 'Hisyamudin',
+      email: 'hisyamudin@sarawaktourism.com',
+      role: 'super_admin',
+      initials: 'HS',
+      createdAt: '2024-01-01T00:00:00Z'
+    },
+    {
+      id: '2',
+      name: 'John Doe',
+      email: 'john@company.com',
+      role: 'super_admin',
+      initials: 'JD',
+      createdAt: '2024-01-01T00:00:00Z'
+    },
+    {
+      id: '3',
+      name: 'Sarah Chen',
+      email: 'sarah@company.com',
+      role: 'admin',
+      initials: 'SC',
+      createdAt: '2024-01-02T00:00:00Z'
+    },
+    {
+      id: '4',
+      name: 'Mike Johnson',
+      email: 'mike@company.com',
+      role: 'user',
+      initials: 'MJ',
+      createdAt: '2024-01-03T00:00:00Z'
+    }
+  ];
+
+  const defaultBudgetCodes: BudgetCode[] = [
+    {
+      id: '1',
+      code: '1-2345',
+      name: 'Software Development',
+      description: 'Budget allocation for software development activities including coding, testing, and deployment',
+      budget: 500000,
+      spent: 74000,
+      isActive: true,
+      createdBy: '1',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    },
+    {
+      id: '2',
+      code: '2-1001',
+      name: 'Marketing & Advertising',
+      description: 'Budget for marketing campaigns, advertising, and promotional activities',
+      budget: 300000,
+      spent: 99200,
+      isActive: true,
+      createdBy: '1',
+      createdAt: '2024-01-02T00:00:00Z',
+      updatedAt: '2024-01-02T00:00:00Z'
+    },
+    {
+      id: '3',
+      code: '3-5678',
+      name: 'Equipment & Hardware',
+      description: 'Purchase and maintenance of equipment, hardware, and infrastructure',
+      budget: 150000,
+      spent: 0,
+      isActive: true,
+      createdBy: '2',
+      createdAt: '2024-01-03T00:00:00Z',
+      updatedAt: '2024-01-03T00:00:00Z'
+    },
+    {
+      id: '4',
+      code: '4-9999',
+      name: 'Training & Development',
+      description: 'Employee training, workshops, and professional development programs',
+      budget: 75000,
+      spent: 0,
+      isActive: false,
+      createdBy: '1',
+      createdAt: '2024-01-04T00:00:00Z',
+      updatedAt: '2024-01-04T00:00:00Z'
+    }
+  ];
+
+  const defaultProjects: Project[] = [
+    {
+      id: '1',
+      name: 'Website Redesign',
+      description: 'Complete overhaul of company website with modern design and improved UX',
+      status: 'active',
+      priority: 'high',
+      startDate: '2024-01-15',
+      endDate: '2024-03-15',
+      budget: 200000,
+      spent: 74000,
+      assignedUsers: ['2', '3'],
+      budgetCodes: ['1', '2'],
+      createdBy: '1',
+      createdAt: '2024-01-10T00:00:00Z',
+      updatedAt: '2024-01-10T00:00:00Z'
+    },
+    {
+      id: '2',
+      name: 'Mobile App Development',
+      description: 'Native iOS and Android app for customer engagement',
+      status: 'planning',
+      priority: 'medium',
+      startDate: '2024-02-01',
+      endDate: '2024-06-01',
+      budget: 480000,
+      spent: 20000,
+      assignedUsers: ['3', '4'],
+      budgetCodes: ['1', '3'],
+      createdBy: '1',
+      createdAt: '2024-01-20T00:00:00Z',
+      updatedAt: '2024-01-20T00:00:00Z'
+    },
+    {
+      id: '3',
+      name: 'Marketing Campaign Q1',
+      description: 'Digital marketing campaign for Q1 product launch',
+      status: 'completed',
+      priority: 'high',
+      startDate: '2024-01-01',
+      endDate: '2024-03-31',
+      budget: 100000,
+      spent: 99200,
+      assignedUsers: ['2'],
+      budgetCodes: ['2'],
+      createdBy: '1',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    }
+  ];
+
+  const defaultBudgetEntries: BudgetEntry[] = [
+    {
+      id: '1',
+      projectId: '1',
+      budgetCodeId: '1',
+      description: 'UI/UX Design Services',
+      amount: 34000,
+      type: 'expense',
+      category: 'Design',
+      date: '2024-01-20',
+      createdBy: '1',
+      createdAt: '2024-01-20T00:00:00Z'
+    },
+    {
+      id: '2',
+      projectId: '1',
+      budgetCodeId: '1',
+      description: 'Development Tools License',
+      amount: 8000,
+      type: 'expense',
+      category: 'Software',
+      date: '2024-01-25',
+      createdBy: '2',
+      createdAt: '2024-01-25T00:00:00Z'
+    },
+    {
+      id: '3',
+      projectId: '2',
+      budgetCodeId: '1',
+      description: 'Market Research',
+      amount: 20000,
+      type: 'expense',
+      category: 'Research',
+      date: '2024-01-30',
+      createdBy: '1',
+      createdAt: '2024-01-30T00:00:00Z'
+    },
+    {
+      id: '4',
+      projectId: '3',
+      budgetCodeId: '2',
+      description: 'Google Ads Campaign',
+      amount: 60000,
+      type: 'expense',
+      category: 'Advertising',
+      date: '2024-02-01',
+      createdBy: '2',
+      createdAt: '2024-02-01T00:00:00Z'
+    },
+    {
+      id: '5',
+      projectId: '1',
+      budgetCodeId: '1',
+      description: 'Frontend Development',
+      amount: 32000,
+      type: 'expense',
+      category: 'Development',
+      date: '2024-02-15',
+      createdBy: '3',
+      createdAt: '2024-02-15T00:00:00Z'
+    },
+    {
+      id: '6',
+      projectId: '3',
+      budgetCodeId: '2',
+      description: 'Social Media Marketing',
+      amount: 25000,
+      type: 'expense',
+      category: 'Marketing',
+      date: '2024-03-01',
+      createdBy: '2',
+      createdAt: '2024-03-01T00:00:00Z'
+    },
+    {
+      id: '7',
+      projectId: '3',
+      budgetCodeId: '2',
+      description: 'Content Creation',
+      amount: 14200,
+      type: 'expense',
+      category: 'Marketing',
+      date: '2024-03-15',
+      createdBy: '2',
+      createdAt: '2024-03-15T00:00:00Z'
+    }
+  ];
+
+  // Initialize state with persistent data
+  const [settings, setSettings] = useState<AppSettings>(() => 
+    loadFromStorage(STORAGE_KEYS.SETTINGS, defaultSettings)
+  );
+
+  const [users, setUsers] = useState<User[]>(() => 
+    loadFromStorage(STORAGE_KEYS.USERS, defaultUsers)
+  );
+
+  const [budgetCodes, setBudgetCodes] = useState<BudgetCode[]>(() => 
+    loadFromStorage(STORAGE_KEYS.BUDGET_CODES, defaultBudgetCodes)
+  );
+
+  const [projects, setProjects] = useState<Project[]>(() => 
+    loadFromStorage(STORAGE_KEYS.PROJECTS, defaultProjects)
+  );
+
+  const [budgetEntries, setBudgetEntries] = useState<BudgetEntry[]>(() => 
+    loadFromStorage(STORAGE_KEYS.BUDGET_ENTRIES, defaultBudgetEntries)
+  );
+
+  const [notifications, setNotifications] = useState<Notification[]>(() => 
+    loadFromStorage(STORAGE_KEYS.NOTIFICATIONS, [])
+  );
+
+  // Save to localStorage whenever state changes
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.USERS, users);
+  }, [users]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.PROJECTS, projects);
+  }, [projects]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.BUDGET_ENTRIES, budgetEntries);
+  }, [budgetEntries]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.BUDGET_CODES, budgetCodes);
+  }, [budgetCodes]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.NOTIFICATIONS, notifications);
+  }, [notifications]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.SETTINGS, settings);
+  }, [settings]);
+
+  // Notification functions
+  const addNotification = (notificationData: Omit<Notification, 'id' | 'createdAt'>) => {
+    const newNotification: Notification = {
+      ...notificationData,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString()
+    };
+    setNotifications(prev => {
+      const updated = [newNotification, ...prev];
+      // Keep only last 100 notifications to prevent storage bloat
+      return updated.slice(0, 100);
+    });
   };
 
-  const deleteProject = async (id: string) => {
-    const { error } = await supabase.from('projects').delete().eq('id', id);
-    if (error) throw error;
-    setProjects(projects.filter(p => p.id !== id));
+  const markNotificationAsRead = (id: string) => {
+    setNotifications(prev => prev.map(notification => 
+      notification.id === id ? { ...notification, read: true } : notification
+    ));
   };
 
-  // Budget code operations
-  const addBudgetCode = async (code: Omit<BudgetCode, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const { data, error } = await supabase.from('budget_codes').insert([code]).select();
-    if (error) throw error;
-    setBudgetCodes([...budgetCodes, data[0]]);
+  const markAllNotificationsAsRead = () => {
+    if (!currentUser) return;
+    setNotifications(prev => prev.map(notification => 
+      notification.userId === currentUser.id ? { ...notification, read: true } : notification
+    ));
   };
 
-  const updateBudgetCode = async (id: string, updates: Partial<BudgetCode>) => {
-    const { data, error } = await supabase
-      .from('budget_codes')
-      .update(updates)
-      .eq('id', id)
-      .select();
-    if (error) throw error;
-    setBudgetCodes(budgetCodes.map(c => c.id === id ? { ...c, ...updates } : c));
+  const deleteNotification = (id: string) => {
+    setNotifications(prev => prev.filter(notification => notification.id !== id));
   };
 
-  const deleteBudgetCode = async (id: string) => {
-    const { error } = await supabase.from('budget_codes').delete().eq('id', id);
-    if (error) throw error;
-    setBudgetCodes(budgetCodes.filter(c => c.id !== id));
+  const getUnreadNotificationCount = () => {
+    if (!currentUser) return 0;
+    return notifications.filter(n => !n.read && n.userId === currentUser.id).length;
   };
 
-  const toggleBudgetCodeStatus = async (id: string) => {
-    const code = budgetCodes.find(c => c.id === id);
-    if (code) {
-      await updateBudgetCode(id, { isActive: !code.isActive });
+  // Helper function to create notifications for all users
+  const notifyAllUsers = (
+    type: Notification['type'],
+    title: string,
+    message: string,
+    data?: any,
+    excludeUserId?: string
+  ) => {
+    users.forEach(user => {
+      if (user.id !== excludeUserId) {
+        addNotification({
+          userId: user.id,
+          type,
+          title,
+          message,
+          data,
+          read: false
+        });
+      }
+    });
+  };
+
+  // Helper function to notify specific users
+  const notifyUsers = (
+    userIds: string[],
+    type: Notification['type'],
+    title: string,
+    message: string,
+    data?: any
+  ) => {
+    userIds.forEach(userId => {
+      addNotification({
+        userId,
+        type,
+        title,
+        message,
+        data,
+        read: false
+      });
+    });
+  };
+
+  // Helper function to check budget code alerts
+  const checkBudgetCodeAlert = (budgetCodeId: string) => {
+    const budgetCode = budgetCodes.find(bc => bc.id === budgetCodeId);
+    if (!budgetCode) return;
+
+    const usagePercentage = (budgetCode.spent / budgetCode.budget) * 100;
+    if (usagePercentage >= settings.budgetAlertThreshold) {
+      notifyAllUsers(
+        'budget_code_alert',
+        'Budget Code Alert',
+        `Budget code "${budgetCode.code} - ${budgetCode.name}" has used ${usagePercentage.toFixed(1)}% of its allocated budget`,
+        { 
+          budgetCodeId: budgetCode.id,
+          percentage: usagePercentage,
+          budget: budgetCode.budget,
+          spent: budgetCode.spent
+        }
+      );
     }
   };
 
-  // Budget entry operations
-  const addBudgetEntry = async (entry: Omit<BudgetEntry, 'id' | 'createdAt'>) => {
-    const { data, error } = await supabase.from('budget_entries').insert([entry]).select();
-    if (error) throw error;
-    setBudgetEntries([...budgetEntries, data[0]]);
+  const addProject = (projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const newProject: Project = {
+      ...projectData,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setProjects(prev => [...prev, newProject]);
+
+    // Notify all users about new project
+    const creatorName = users.find(u => u.id === projectData.createdBy)?.name || 'Someone';
+    notifyAllUsers(
+      'project_created',
+      'New Project Created',
+      `${creatorName} created a new project: ${newProject.name}`,
+      { projectId: newProject.id, createdBy: projectData.createdBy },
+      projectData.createdBy
+    );
+
+    // Notify assigned users specifically
+    if (projectData.assignedUsers.length > 0) {
+      notifyUsers(
+        projectData.assignedUsers,
+        'user_assigned',
+        'Project Assignment',
+        `You have been assigned to the project: ${newProject.name}`,
+        { projectId: newProject.id }
+      );
+    }
   };
 
-  const updateBudgetEntry = async (id: string, updates: Partial<BudgetEntry>) => {
-    const { data, error } = await supabase
-      .from('budget_entries')
-      .update(updates)
-      .eq('id', id)
-      .select();
-    if (error) throw error;
-    setBudgetEntries(budgetEntries.map(e => e.id === id ? { ...e, ...updates } : e));
+  const updateProject = (id: string, updates: Partial<Project>) => {
+    const oldProject = projects.find(p => p.id === id);
+    if (!oldProject) return;
+
+    const updatedProject = { ...oldProject, ...updates, updatedAt: new Date().toISOString() };
+    setProjects(prev => prev.map(project => 
+      project.id === id ? updatedProject : project
+    ));
+
+    // Notify all users about project update
+    const updaterName = currentUser?.name || 'Someone';
+    notifyAllUsers(
+      'project_updated',
+      'Project Updated',
+      `${updaterName} updated the project: ${updatedProject.name}`,
+      { 
+        projectId: id, 
+        updatedBy: currentUser?.id,
+        changes: Object.keys(updates)
+      },
+      currentUser?.id
+    );
+
+    // Check for budget alerts
+    const budgetUsagePercentage = (updatedProject.spent / updatedProject.budget) * 100;
+    if (budgetUsagePercentage >= settings.budgetAlertThreshold) {
+      notifyAllUsers(
+        'budget_alert',
+        'Budget Alert',
+        `Project "${updatedProject.name}" has used ${budgetUsagePercentage.toFixed(1)}% of its budget`,
+        { 
+          projectId: id, 
+          percentage: budgetUsagePercentage,
+          budget: updatedProject.budget,
+          spent: updatedProject.spent
+        }
+      );
+    }
+
+    // Notify if project status changed to completed
+    if (updates.status === 'completed' && oldProject.status !== 'completed') {
+      notifyAllUsers(
+        'project_completed',
+        'Project Completed',
+        `Project "${updatedProject.name}" has been marked as completed`,
+        { projectId: id }
+      );
+    }
+
+    // Notify newly assigned users
+    if (updates.assignedUsers) {
+      const newlyAssigned = updates.assignedUsers.filter(userId => 
+        !oldProject.assignedUsers.includes(userId)
+      );
+      if (newlyAssigned.length > 0) {
+        notifyUsers(
+          newlyAssigned,
+          'user_assigned',
+          'Project Assignment',
+          `You have been assigned to the project: ${updatedProject.name}`,
+          { projectId: id }
+        );
+      }
+    }
   };
 
-  const deleteBudgetEntry = async (id: string) => {
-    const { error } = await supabase.from('budget_entries').delete().eq('id', id);
-    if (error) throw error;
-    setBudgetEntries(budgetEntries.filter(e => e.id !== id));
+  const deleteProject = (id: string) => {
+    const project = projects.find(p => p.id === id);
+    if (!project) return;
+
+    setProjects(prev => prev.filter(project => project.id !== id));
+    setBudgetEntries(prev => prev.filter(entry => entry.projectId !== id));
+
+    // Notify all users about project deletion
+    const deleterName = currentUser?.name || 'Someone';
+    notifyAllUsers(
+      'project_updated',
+      'Project Deleted',
+      `${deleterName} deleted the project: ${project.name}`,
+      { projectId: id, deletedBy: currentUser?.id },
+      currentUser?.id
+    );
   };
 
-  // Notification operations
-  const getUnreadNotificationCount = () => {
-    return notifications.filter(n => !n.read).length;
+  const addBudgetEntry = (entryData: Omit<BudgetEntry, 'id' | 'createdAt'>) => {
+    const newEntry: BudgetEntry = {
+      ...entryData,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString()
+    };
+    setBudgetEntries(prev => [...prev, newEntry]);
+    
+    // Update project spent amount
+    const project = projects.find(p => p.id === entryData.projectId);
+    if (project && entryData.type === 'expense') {
+      updateProject(project.id, { spent: project.spent + entryData.amount });
+    }
+
+    // Update budget code spent amount
+    if (entryData.budgetCodeId && entryData.type === 'expense') {
+      setBudgetCodes(prev => prev.map(code => 
+        code.id === entryData.budgetCodeId 
+          ? { ...code, spent: code.spent + entryData.amount, updatedAt: new Date().toISOString() }
+          : code
+      ));
+      
+      // Check for budget code alerts after updating
+      setTimeout(() => checkBudgetCodeAlert(entryData.budgetCodeId!), 100);
+    }
+
+    // Notify project team about new budget entry
+    if (project) {
+      const creatorName = users.find(u => u.id === entryData.createdBy)?.name || 'Someone';
+      const notificationMessage = `${creatorName} added a new ${entryData.type} of ${settings.currency} ${entryData.amount.toLocaleString()} to ${project.name}`;
+      
+      // Notify assigned users and project creator
+      const usersToNotify = [...new Set([...project.assignedUsers, project.createdBy])];
+      notifyUsers(
+        usersToNotify.filter(userId => userId !== entryData.createdBy),
+        'budget_entry_added',
+        'New Budget Entry',
+        notificationMessage,
+        { 
+          projectId: entryData.projectId, 
+          entryId: newEntry.id,
+          amount: entryData.amount,
+          type: entryData.type,
+          budgetCodeId: entryData.budgetCodeId
+        }
+      );
+    }
   };
 
-  const markNotificationAsRead = async (id: string) => {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ read: true })
-      .eq('id', id);
-    if (error) throw error;
-    setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
+  const updateBudgetEntry = (id: string, updates: Partial<BudgetEntry>) => {
+    const oldEntry = budgetEntries.find(e => e.id === id);
+    if (!oldEntry) return;
+
+    setBudgetEntries(prev => prev.map(entry => 
+      entry.id === id ? { ...entry, ...updates } : entry
+    ));
+
+    // Update budget code spent amounts if amount or budget code changed
+    if (updates.amount !== undefined || updates.budgetCodeId !== undefined) {
+      // Remove from old budget code
+      if (oldEntry.budgetCodeId && oldEntry.type === 'expense') {
+        setBudgetCodes(prev => prev.map(code => 
+          code.id === oldEntry.budgetCodeId 
+            ? { ...code, spent: Math.max(0, code.spent - oldEntry.amount), updatedAt: new Date().toISOString() }
+            : code
+        ));
+      }
+      
+      // Add to new budget code
+      const newBudgetCodeId = updates.budgetCodeId !== undefined ? updates.budgetCodeId : oldEntry.budgetCodeId;
+      if (newBudgetCodeId && oldEntry.type === 'expense') {
+        setBudgetCodes(prev => prev.map(code => 
+          code.id === newBudgetCodeId 
+            ? { ...code, spent: code.spent + (updates.amount || oldEntry.amount), updatedAt: new Date().toISOString() }
+            : code
+        ));
+        
+        // Check for budget code alerts
+        setTimeout(() => checkBudgetCodeAlert(newBudgetCodeId), 100);
+      }
+    }
   };
 
-  const markAllNotificationsAsRead = async () => {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ read: true })
-      .eq('read', false);
-    if (error) throw error;
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+  const deleteBudgetEntry = (id: string) => {
+    const entry = budgetEntries.find(e => e.id === id);
+    if (!entry) return;
+
+    // Update project spent amount
+    if (entry.type === 'expense') {
+      const project = projects.find(p => p.id === entry.projectId);
+      if (project) {
+        updateProject(project.id, { spent: project.spent - entry.amount });
+      }
+      
+      // Update budget code spent amount
+      if (entry.budgetCodeId) {
+        setBudgetCodes(prev => prev.map(code => 
+          code.id === entry.budgetCodeId 
+            ? { ...code, spent: Math.max(0, code.spent - entry.amount), updatedAt: new Date().toISOString() }
+            : code
+        ));
+      }
+    }
+    
+    setBudgetEntries(prev => prev.filter(entry => entry.id !== id));
   };
 
-  const deleteNotification = async (id: string) => {
-    const { error } = await supabase.from('notifications').delete().eq('id', id);
-    if (error) throw error;
-    setNotifications(notifications.filter(n => n.id !== id));
+  const addUser = (userData: Omit<User, 'id' | 'createdAt'>) => {
+    const newUser: User = {
+      ...userData,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString()
+    };
+    setUsers(prev => [...prev, newUser]);
+
+    // Notify all admins about new user
+    const adminUsers = users.filter(u => u.role === 'admin' || u.role === 'super_admin');
+    const creatorName = currentUser?.name || 'Someone';
+    notifyUsers(
+      adminUsers.map(u => u.id).filter(id => id !== currentUser?.id),
+      'user_assigned',
+      'New User Added',
+      `${creatorName} added a new user: ${newUser.name} (${newUser.role.replace('_', ' ')})`,
+      { userId: newUser.id }
+    );
   };
 
-  const value = {
-    currentView,
-    setCurrentView,
-    projects,
-    budgetCodes,
-    budgetEntries,
-    notifications,
-    settings,
-    addProject,
-    updateProject,
-    deleteProject,
-    addBudgetCode,
-    updateBudgetCode,
-    deleteBudgetCode,
-    toggleBudgetCodeStatus,
-    addBudgetEntry,
-    updateBudgetEntry,
-    deleteBudgetEntry,
-    getUnreadNotificationCount,
-    markNotificationAsRead,
-    markAllNotificationsAsRead,
-    deleteNotification,
-    users,
-    sidebarCollapsed,
-    setSidebarCollapsed,
+  const updateUser = (id: string, updates: Partial<User>) => {
+    setUsers(prev => prev.map(user => 
+      user.id === id ? { ...user, ...updates } : user
+    ));
   };
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  const deleteUser = (id: string) => {
+    setUsers(prev => prev.filter(user => user.id !== id));
+    // Also remove user from project assignments
+    setProjects(prev => prev.map(project => ({
+      ...project,
+      assignedUsers: project.assignedUsers.filter(userId => userId !== id)
+    })));
+    // Remove user's notifications
+    setNotifications(prev => prev.filter(notification => notification.userId !== id));
+  };
+
+  const addBudgetCode = (codeData: Omit<BudgetCode, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const newCode: BudgetCode = {
+      ...codeData,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setBudgetCodes(prev => [...prev, newCode]);
+  };
+
+  const updateBudgetCode = (id: string, updates: Partial<BudgetCode>) => {
+    setBudgetCodes(prev => prev.map(code => 
+      code.id === id 
+        ? { ...code, ...updates, updatedAt: new Date().toISOString() }
+        : code
+    ));
+    
+    // Check for budget alerts if budget was changed
+    if (updates.budget !== undefined) {
+      setTimeout(() => checkBudgetCodeAlert(id), 100);
+    }
+  };
+
+  const deleteBudgetCode = (id: string) => {
+    setBudgetCodes(prev => prev.filter(code => code.id !== id));
+    // Remove budget code from projects
+    setProjects(prev => prev.map(project => ({
+      ...project,
+      budgetCodes: project.budgetCodes.filter(codeId => codeId !== id)
+    })));
+    // Remove budget code from entries
+    setBudgetEntries(prev => prev.map(entry => ({
+      ...entry,
+      budgetCodeId: entry.budgetCodeId === id ? undefined : entry.budgetCodeId
+    })));
+  };
+
+  const toggleBudgetCodeStatus = (id: string) => {
+    setBudgetCodes(prev => prev.map(code => 
+      code.id === id 
+        ? { ...code, isActive: !code.isActive, updatedAt: new Date().toISOString() }
+        : code
+    ));
+  };
+
+  const updateSettings = (newSettings: Partial<AppSettings>) => {
+    setSettings(prev => ({ ...prev, ...newSettings }));
+  };
+
+  return (
+    <AppContext.Provider value={{
+      users,
+      projects,
+      budgetEntries,
+      budgetCodes,
+      notifications,
+      settings,
+      currentView,
+      selectedProject,
+      sidebarCollapsed,
+      setCurrentView,
+      setSelectedProject,
+      setSidebarCollapsed,
+      addProject,
+      updateProject,
+      deleteProject,
+      addBudgetEntry,
+      updateBudgetEntry,
+      deleteBudgetEntry,
+      addUser,
+      updateUser,
+      deleteUser,
+      addBudgetCode,
+      updateBudgetCode,
+      deleteBudgetCode,
+      toggleBudgetCodeStatus,
+      updateSettings,
+      addNotification,
+      markNotificationAsRead,
+      markAllNotificationsAsRead,
+      deleteNotification,
+      getUnreadNotificationCount
+    }}>
+      {children}
+    </AppContext.Provider>
+  );
 };

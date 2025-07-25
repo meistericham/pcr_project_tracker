@@ -1,324 +1,414 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { useApp } from '../contexts/AppContext';
-import { useTheme } from '../contexts/ThemeContext';
+import React, { useState } from 'react';
 import { 
-  Settings, 
-  User, 
+  Save, 
+  Building2, 
+  DollarSign, 
+  Calendar, 
   Bell, 
   Shield, 
-  Palette, 
-  Mail,
-  Save,
-  Eye,
-  EyeOff
+  Database,
+  AlertTriangle,
+  Clock,
+  FileText,
+  Settings as SettingsIcon,
+  Globe,
+  Palette,
+  Users,
+  Hash,
+  ExternalLink,
+  FileSpreadsheet,
+  Key
 } from 'lucide-react';
+import { useApp } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import DatabaseSetup from './DatabaseSetup';
+import GoogleSheetsIntegration from './GoogleSheetsIntegration';
+import PasswordChangeModal from './PasswordChangeModal';
 
 const SettingsView = () => {
-  const { user } = useAuth();
-  const { users, updateUser, settings, updateSettings } = useApp();
-  const { theme, toggleTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState('general');
+  const { settings, updateSettings } = useApp();
+  const { currentUser } = useAuth();
+  const { theme, setTheme } = useTheme();
+  const [activeTab, setActiveTab] = useState<'general' | 'budget' | 'notifications' | 'security' | 'backup' | 'database' | 'integrations'>('general');
+  const [hasChanges, setHasChanges] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+
   const [formData, setFormData] = useState({
-    name: user?.name || '',
-    email: user?.email || '',
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-    notifications: true,
-    emailNotifications: true,
-    smtpHost: '',
-    smtpPort: '',
-    smtpSecurity: 'tls',
-    smtpUsername: '',
-    smtpPassword: '',
-    smtpFromEmail: ''
-  });
-  const [showPasswords, setShowPasswords] = useState({
-    current: false,
-    new: false,
-    confirm: false
+    companyName: settings.companyName,
+    currency: settings.currency,
+    dateFormat: settings.dateFormat,
+    fiscalYearStart: settings.fiscalYearStart,
+    budgetAlertThreshold: settings.budgetAlertThreshold,
+    autoBackup: settings.autoBackup,
+    emailNotifications: settings.emailNotifications,
+    defaultProjectStatus: settings.defaultProjectStatus,
+    defaultProjectPriority: settings.defaultProjectPriority,
+    maxProjectDuration: settings.maxProjectDuration,
+    requireBudgetApproval: settings.requireBudgetApproval,
+    allowNegativeBudget: settings.allowNegativeBudget,
+    budgetCategories: settings.budgetCategories.join(', ')
   });
 
-  const isSuperAdmin = user?.role === 'super_admin';
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
-
-  useEffect(() => {
-    if (user) {
-      setFormData(prev => ({
-        ...prev,
-        name: user.name,
-        email: user.email,
-        ...settings
-      }));
-    }
-  }, [user, settings]);
-
-  const handleInputChange = (field: string, value: string | boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setHasChanges(true);
   };
 
-  const handleSaveProfile = () => {
-    if (user) {
-      updateUser(user.id, {
-        name: formData.name,
-        email: formData.email
-      });
-      alert('Profile updated successfully!');
-    }
-  };
-
-  const handleSaveSettings = () => {
-    const settingsToSave = {
-      notifications: formData.notifications,
-      emailNotifications: formData.emailNotifications,
-      smtpHost: formData.smtpHost,
-      smtpPort: formData.smtpPort,
-      smtpSecurity: formData.smtpSecurity,
-      smtpUsername: formData.smtpUsername,
-      smtpPassword: formData.smtpPassword,
-      smtpFromEmail: formData.smtpFromEmail
+  const handleSave = () => {
+    const updatedSettings = {
+      ...formData,
+      budgetCategories: formData.budgetCategories.split(',').map(cat => cat.trim()).filter(Boolean)
     };
-    updateSettings(settingsToSave);
-    alert('Settings saved successfully!');
+    updateSettings(updatedSettings);
+    setHasChanges(false);
   };
 
-  const handlePasswordChange = () => {
-    if (formData.newPassword !== formData.confirmPassword) {
-      alert('New passwords do not match!');
-      return;
-    }
-    if (formData.newPassword.length < 6) {
-      alert('Password must be at least 6 characters long!');
-      return;
-    }
-    // In a real app, you would verify the current password
-    alert('Password changed successfully!');
-    setFormData(prev => ({
-      ...prev,
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: ''
-    }));
-  };
-
-  const togglePasswordVisibility = (field: 'current' | 'new' | 'confirm') => {
-    setShowPasswords(prev => ({
-      ...prev,
-      [field]: !prev[field]
-    }));
-  };
+  const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   const tabs = [
-    { id: 'general', label: 'General', icon: Settings },
-    { id: 'profile', label: 'Profile', icon: User },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'security', label: 'Security', icon: Shield }
+    { id: 'general', label: 'General', icon: SettingsIcon, adminOnly: false },
+    { id: 'security', label: 'Security', icon: Shield, adminOnly: false },
+    { id: 'budget', label: 'Budget', icon: DollarSign, adminOnly: true },
+    { id: 'notifications', label: 'Notifications', icon: Bell, adminOnly: true },
+    { id: 'backup', label: 'Backup', icon: Database, adminOnly: true },
+    { id: 'database', label: 'Database Setup', icon: Database, adminOnly: true },
+    { id: 'integrations', label: 'Integrations', icon: FileSpreadsheet, adminOnly: true }
+  ];
+
+  const availableTabs = tabs.filter(tab => !tab.adminOnly || isSuperAdmin);
+
+  const currencies = [
+    { value: 'MYR', label: 'Malaysian Ringgit (MYR)' },
+    { value: 'USD', label: 'US Dollar (USD)' },
+    { value: 'EUR', label: 'Euro (EUR)' },
+    { value: 'GBP', label: 'British Pound (GBP)' }
+  ];
+
+  const dateFormats = [
+    { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY (31/12/2024)' },
+    { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY (12/31/2024)' },
+    { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD (2024-12-31)' }
+  ];
+
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const themes = [
+    { value: 'light', label: 'Light Mode' },
+    { value: 'dark', label: 'Dark Mode' },
+    { value: 'system', label: 'System Default' }
   ];
 
   const renderGeneralSettings = () => (
     <div className="space-y-6">
+      {/* Company Information */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Company Information</h3>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Company Name
+            </label>
+            <input
+              type="text"
+              value={formData.companyName}
+              onChange={(e) => handleInputChange('companyName', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              placeholder="Enter company name"
+              disabled={!isSuperAdmin}
+            />
+            {!isSuperAdmin && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Only Super Admins can modify company information
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Regional Settings */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <Globe className="h-5 w-5 text-green-600 dark:text-green-400" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Regional Settings</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Currency
+            </label>
+            <select
+              value={formData.currency}
+              onChange={(e) => handleInputChange('currency', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              disabled={!isSuperAdmin}
+            >
+              {currencies.map(currency => (
+                <option key={currency.value} value={currency.value}>
+                  {currency.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Date Format
+            </label>
+            <select
+              value={formData.dateFormat}
+              onChange={(e) => handleInputChange('dateFormat', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              disabled={!isSuperAdmin}
+            >
+              {dateFormats.map(format => (
+                <option key={format.value} value={format.value}>
+                  {format.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {!isSuperAdmin && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+            Only Super Admins can modify regional settings
+          </p>
+        )}
+      </div>
+
       {/* Appearance */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center space-x-3 mb-4">
           <Palette className="h-5 w-5 text-purple-600 dark:text-purple-400" />
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Appearance</h3>
         </div>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Theme
-              </label>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Choose your preferred theme
-              </p>
-            </div>
-            <button
-              onClick={toggleTheme}
-              className="px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-600 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-            >
-              {theme === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
-            </button>
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Theme
+          </label>
+          <select
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as any)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          >
+            {themes.map(themeOption => (
+              <option key={themeOption.value} value={themeOption.value}>
+                {themeOption.label}
+              </option>
+            ))}
+          </select>
         </div>
-      </div>
-
-      {/* Email Settings */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex items-center space-x-3 mb-4">
-          <Mail className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Email Settings</h3>
-        </div>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              SMTP Host
-            </label>
-            <input
-              type="text"
-              value={formData.smtpHost || ''}
-              onChange={(e) => handleInputChange('smtpHost', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="smtp.example.com"
-              disabled={!isSuperAdmin}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                SMTP Port
-              </label>
-              <input
-                type="number"
-                value={formData.smtpPort || ''}
-                onChange={(e) => handleInputChange('smtpPort', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                placeholder="587"
-                disabled={!isSuperAdmin}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Security
-              </label>
-              <select
-                value={formData.smtpSecurity || 'tls'}
-                onChange={(e) => handleInputChange('smtpSecurity', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                disabled={!isSuperAdmin}
-              >
-                <option value="none">None</option>
-                <option value="tls">TLS</option>
-                <option value="ssl">SSL</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              SMTP Username
-            </label>
-            <input
-              type="text"
-              value={formData.smtpUsername || ''}
-              onChange={(e) => handleInputChange('smtpUsername', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="username@example.com"
-              disabled={!isSuperAdmin}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              SMTP Password
-            </label>
-            <input
-              type="password"
-              value={formData.smtpPassword || ''}
-              onChange={(e) => handleInputChange('smtpPassword', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="••••••••"
-              disabled={!isSuperAdmin}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              From Email Address
-            </label>
-            <input
-              type="email"
-              value={formData.smtpFromEmail || ''}
-              onChange={(e) => handleInputChange('smtpFromEmail', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="noreply@example.com"
-              disabled={!isSuperAdmin}
-            />
-          </div>
-          {!isSuperAdmin && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-              Only Super Admins can modify email settings
-            </p>
-          )}
-          {isSuperAdmin && (
-            <button
-              onClick={() => {
-                alert('Test email functionality will be implemented here');
-              }}
-              className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-600 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-            >
-              <Mail className="h-4 w-4" />
-              <span>Send Test Email</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-        <button
-          onClick={handleSaveSettings}
-          className="flex items-center space-x-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-        >
-          <Save className="h-4 w-4" />
-          <span>Save Settings</span>
-        </button>
       </div>
     </div>
   );
 
-  const renderProfileSettings = () => (
+  const renderSecuritySettings = () => (
     <div className="space-y-6">
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center space-x-3 mb-4">
-          <User className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Profile Information</h3>
+          <Shield className="h-5 w-5 text-red-600 dark:text-red-400" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Security Settings</h3>
+        </div>
+        <div className="space-y-6">
+          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div className="flex items-center space-x-2">
+              <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                Current User: {currentUser?.name} ({currentUser?.role.replace('_', ' ').toUpperCase()})
+              </span>
+            </div>
+          </div>
+
+          {/* Password Change Section */}
+          <div className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white">Password</h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Change your account password for better security
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPasswordModal(true)}
+                className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 border border-blue-300 dark:border-blue-600 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              >
+                <Key className="h-4 w-4" />
+                <span>Change Password</span>
+              </button>
+            </div>
+          </div>
+
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Additional security settings can only be modified by system administrators. Contact your system administrator for advanced security policy updates.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderBudgetSettings = () => (
+    <div className="space-y-6">
+      {/* Budget Configuration */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Budget Configuration</h3>
         </div>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Full Name
+              Fiscal Year Start Month
             </label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => handleInputChange('name', e.target.value)}
+            <select
+              value={formData.fiscalYearStart}
+              onChange={(e) => handleInputChange('fiscalYearStart', parseInt(e.target.value))}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
+            >
+              {months.map((month, index) => (
+                <option key={index} value={index + 1}>
+                  {month}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Email Address
+              Budget Alert Threshold ({formData.budgetAlertThreshold}%)
             </label>
             <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              type="range"
+              min="50"
+              max="100"
+              value={formData.budgetAlertThreshold}
+              onChange={(e) => handleInputChange('budgetAlertThreshold', parseInt(e.target.value))}
+              className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Role
-            </label>
-            <input
-              type="text"
-              value={user?.role || ''}
-              disabled
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-600 text-gray-500 dark:text-gray-400"
-            />
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <span>50%</span>
+              <span>75%</span>
+              <span>100%</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex justify-end">
-        <button
-          onClick={handleSaveProfile}
-          className="flex items-center space-x-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-        >
-          <Save className="h-4 w-4" />
-          <span>Save Profile</span>
-        </button>
+      {/* Project Defaults */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Project Defaults</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Default Project Status
+            </label>
+            <select
+              value={formData.defaultProjectStatus}
+              onChange={(e) => handleInputChange('defaultProjectStatus', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            >
+              <option value="planning">Planning</option>
+              <option value="active">Active</option>
+              <option value="on_hold">On Hold</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Default Project Priority
+            </label>
+            <select
+              value={formData.defaultProjectPriority}
+              onChange={(e) => handleInputChange('defaultProjectPriority', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Maximum Project Duration (Days)
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="3650"
+            value={formData.maxProjectDuration}
+            onChange={(e) => handleInputChange('maxProjectDuration', parseInt(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          />
+        </div>
+      </div>
+
+      {/* Budget Categories */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <Hash className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Budget Categories</h3>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Available Categories (comma-separated)
+          </label>
+          <textarea
+            rows={3}
+            value={formData.budgetCategories}
+            onChange={(e) => handleInputChange('budgetCategories', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            placeholder="Design, Development, Marketing, Software, Research, Advertising, Equipment, Travel, Training, Other"
+          />
+        </div>
+      </div>
+
+      {/* Budget Policies */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <Shield className="h-5 w-5 text-red-600 dark:text-red-400" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Budget Policies</h3>
+        </div>
+        <div className="space-y-4">
+          <label className="flex items-center space-x-3">
+            <input
+              type="checkbox"
+              checked={formData.requireBudgetApproval}
+              onChange={(e) => handleInputChange('requireBudgetApproval', e.target.checked)}
+              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-900 dark:text-white">
+                Require Budget Approval
+              </span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Budget entries above threshold require approval
+              </p>
+            </div>
+          </label>
+          <label className="flex items-center space-x-3">
+            <input
+              type="checkbox"
+              checked={formData.allowNegativeBudget}
+              onChange={(e) => handleInputChange('allowNegativeBudget', e.target.checked)}
+              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-900 dark:text-white">
+                Allow Negative Budget
+              </span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Allow projects to exceed their allocated budget
+              </p>
+            </div>
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -331,207 +421,202 @@ const SettingsView = () => {
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Notification Preferences</h3>
         </div>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <label className="flex items-center space-x-3">
+            <input
+              type="checkbox"
+              checked={formData.emailNotifications}
+              onChange={(e) => handleInputChange('emailNotifications', e.target.checked)}
+              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+            />
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                In-App Notifications
-              </label>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Receive notifications within the application
-              </p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.notifications}
-                onChange={(e) => handleInputChange('notifications', e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <span className="text-sm font-medium text-gray-900 dark:text-white">
                 Email Notifications
-              </label>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Receive notifications via email
+              </span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Receive email notifications for important updates
               </p>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.emailNotifications}
-                onChange={(e) => handleInputChange('emailNotifications', e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
+          </label>
         </div>
-      </div>
-
-      <div className="flex justify-end">
-        <button
-          onClick={handleSaveSettings}
-          className="flex items-center space-x-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-        >
-          <Save className="h-4 w-4" />
-          <span>Save Settings</span>
-        </button>
       </div>
     </div>
   );
 
-  const renderSecuritySettings = () => (
+  const renderBackupSettings = () => (
     <div className="space-y-6">
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center space-x-3 mb-4">
-          <Shield className="h-5 w-5 text-red-600 dark:text-red-400" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Change Password</h3>
+          <Database className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Backup Settings</h3>
         </div>
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Current Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPasswords.current ? "text" : "password"}
-                value={formData.currentPassword}
-                onChange={(e) => handleInputChange('currentPassword', e.target.value)}
-                className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
-              <button
-                type="button"
-                onClick={() => togglePasswordVisibility('current')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
-              >
-                {showPasswords.current ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
-                ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
-                )}
-              </button>
+          <label className="flex items-center space-x-3">
+            <input
+              type="checkbox"
+              checked={formData.autoBackup}
+              onChange={(e) => handleInputChange('autoBackup', e.target.checked)}
+              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-900 dark:text-white">
+                Automatic Backup
+              </span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Automatically backup data daily at 2:00 AM
+              </p>
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              New Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPasswords.new ? "text" : "password"}
-                value={formData.newPassword}
-                onChange={(e) => handleInputChange('newPassword', e.target.value)}
-                className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
-              <button
-                type="button"
-                onClick={() => togglePasswordVisibility('new')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
-              >
-                {showPasswords.new ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
-                ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
-                )}
-              </button>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Confirm New Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPasswords.confirm ? "text" : "password"}
-                value={formData.confirmPassword}
-                onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
-              <button
-                type="button"
-                onClick={() => togglePasswordVisibility('confirm')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
-              >
-                {showPasswords.confirm ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
-                ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
-                )}
-              </button>
-            </div>
+          </label>
+          <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+            <p className="text-sm text-green-800 dark:text-green-300">
+              Last backup: Today at 2:00 AM
+            </p>
           </div>
         </div>
-      </div>
-
-      <div className="flex justify-end">
-        <button
-          onClick={handlePasswordChange}
-          className="flex items-center space-x-2 px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-        >
-          <Shield className="h-4 w-4" />
-          <span>Change Password</span>
-        </button>
       </div>
     </div>
   );
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'general':
-        return renderGeneralSettings();
-      case 'profile':
-        return renderProfileSettings();
-      case 'notifications':
-        return renderNotificationSettings();
-      case 'security':
-        return renderSecuritySettings();
-      default:
-        return renderGeneralSettings();
-    }
-  };
+  const renderDatabaseSettings = () => (
+    <div className="space-y-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <Database className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Database Integration</h3>
+          </div>
+          <a
+            href="https://supabase.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center space-x-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            <span>Visit Supabase</span>
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <h4 className="font-medium text-blue-900 dark:text-blue-300 mb-2">
+              Current Database Status
+            </h4>
+            <p className="text-sm text-blue-800 dark:text-blue-400">
+              Currently using in-memory storage. Set up Supabase for persistent data storage, real-time sync, and production deployment.
+            </p>
+          </div>
 
-  return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">Settings</h1>
-        <p className="text-gray-600 dark:text-gray-400">Manage your account settings and preferences</p>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Sidebar */}
-        <div className="lg:w-64 flex-shrink-0">
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-            <nav className="space-y-2">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                      activeTab === tab.id
-                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span className="font-medium">{tab.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
+          <div className="space-y-3">
+            <h4 className="font-medium text-gray-900 dark:text-white">Available Database Options:</h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg">
+                <h5 className="font-medium text-gray-900 dark:text-white mb-2">Supabase (Recommended)</h5>
+                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                  <li>• PostgreSQL database</li>
+                  <li>• Real-time synchronization</li>
+                  <li>• Built-in authentication</li>
+                  <li>• Automatic backups</li>
+                  <li>• Row-level security</li>
+                </ul>
+              </div>
+              
+              <div className="p-4 border border-gray-200 dark:border-gray-600 rounded-lg">
+                <h5 className="font-medium text-gray-900 dark:text-white mb-2">Google Sheets (Available)</h5>
+                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                  <li>• Simple spreadsheet storage</li>
+                  <li>• Easy data export</li>
+                  <li>• Collaborative editing</li>
+                  <li>• Basic reporting</li>
+                  <li>• See Integrations tab</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
+      </div>
 
-        {/* Content */}
-        <div className="flex-1">
-          {renderTabContent()}
+      <DatabaseSetup />
+    </div>
+  );
+
+  const renderIntegrationsSettings = () => (
+    <div className="space-y-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <FileSpreadsheet className="h-5 w-5 text-green-600 dark:text-green-400" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Third-Party Integrations</h3>
+        </div>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">
+          Connect your PCR Tracker with external services to enhance functionality and streamline workflows.
+        </p>
+      </div>
+
+      <GoogleSheetsIntegration />
+    </div>
+  );
+
+  return (
+    <div className="w-full h-full">
+      <div className="p-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              System Settings
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Configure your PCR Tracker preferences and system options
+            </p>
+          </div>
+          {hasChanges && !['database', 'integrations', 'security'].includes(activeTab) && (
+            <button
+              onClick={handleSave}
+              className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
+            >
+              <Save className="h-4 w-4" />
+              <span>Save Changes</span>
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Tabs */}
+          <div className="lg:w-64">
+            <nav className="space-y-1">
+              {availableTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  <tab.icon className="h-4 w-4" />
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1">
+            {activeTab === 'general' && renderGeneralSettings()}
+            {activeTab === 'security' && renderSecuritySettings()}
+            {activeTab === 'budget' && renderBudgetSettings()}
+            {activeTab === 'notifications' && renderNotificationSettings()}
+            {activeTab === 'backup' && renderBackupSettings()}
+            {activeTab === 'database' && renderDatabaseSettings()}
+            {activeTab === 'integrations' && renderIntegrationsSettings()}
+          </div>
         </div>
       </div>
+
+      {/* Password Change Modal */}
+      {showPasswordModal && (
+        <PasswordChangeModal onClose={() => setShowPasswordModal(false)} />
+      )}
     </div>
   );
 };
