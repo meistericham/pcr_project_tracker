@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { userService, projectService, budgetEntryService, budgetCodeService, notificationService } from '../lib/database';
 import { useAuth } from './AuthContext';
 import { User, Project, BudgetEntry, BudgetCode, ViewMode, AppSettings, Notification, Division, Unit } from '../types';
 
@@ -99,6 +100,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentView, setCurrentView] = useState<ViewMode>('projects');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const useServerDb = (import.meta as any).env?.VITE_USE_SERVER_DB === 'true';
 
   // Create debounced save functions
   const debouncedSaveUsers = React.useMemo(() => createDebouncedSave(STORAGE_KEYS.USERS), []);
@@ -414,6 +416,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadFromStorage(STORAGE_KEYS.NOTIFICATIONS, [])
   );
 
+  // Optional server hydration
+  useEffect(() => {
+    if (!useServerDb) return;
+    (async () => {
+      try {
+        const [remoteUsers, remoteCodes, remoteProjects, remoteEntries, remoteNotifs] = await Promise.all([
+          userService.getAll().catch(() => users),
+          budgetCodeService.getAll().catch(() => budgetCodes),
+          projectService.getAll().catch(() => projects),
+          budgetEntryService.getAll().catch(() => budgetEntries),
+          notificationService.getAll().catch(() => notifications)
+        ]);
+        setUsers(remoteUsers);
+        setBudgetCodes(remoteCodes);
+        setProjects(remoteProjects);
+        setBudgetEntries(remoteEntries);
+        setNotifications(remoteNotifs);
+      } catch (e) {
+        console.error('Server hydration failed; using local data', e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Save to localStorage whenever state changes (optimized with debouncing)
   useEffect(() => {
     debouncedSaveUsers(users);
@@ -480,12 +506,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [settings, debouncedSaveSettings]);
 
   // Notification functions
-  const addNotification = (notificationData: Omit<Notification, 'id' | 'createdAt'>) => {
-    const newNotification: Notification = {
-      ...notificationData,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString()
-    };
+  const addNotification = async (notificationData: Omit<Notification, 'id' | 'createdAt'>) => {
+    const newNotification: Notification = useServerDb
+      ? await notificationService.create(notificationData)
+      : { ...notificationData, id: Date.now().toString(), createdAt: new Date().toISOString() } as Notification;
     setNotifications(prev => {
       const updated = [newNotification, ...prev];
       // Keep only last 100 notifications to prevent storage bloat
@@ -578,13 +602,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addProject = (projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const newProject: Project = {
-      ...projectData,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+  const addProject = async (projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => {
+    let newProject: Project;
+    if (useServerDb) {
+      newProject = await projectService.create(projectData);
+    } else {
+      newProject = { ...projectData, id: Date.now().toString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as Project;
+    }
     setProjects(prev => [...prev, newProject]);
 
     // Notify all users about new project
@@ -609,11 +633,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const updateProject = (id: string, updates: Partial<Project>) => {
+  const updateProject = async (id: string, updates: Partial<Project>) => {
     const oldProject = projects.find(p => p.id === id);
     if (!oldProject) return;
 
-    const updatedProject = { ...oldProject, ...updates, updatedAt: new Date().toISOString() };
+    const updatedProject = useServerDb ? await projectService.update(id, updates) : { ...oldProject, ...updates, updatedAt: new Date().toISOString() } as Project;
     setProjects(prev => prev.map(project => 
       project.id === id ? updatedProject : project
     ));
@@ -675,10 +699,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const deleteProject = (id: string) => {
+  const deleteProject = async (id: string) => {
     const project = projects.find(p => p.id === id);
     if (!project) return;
-
+    if (useServerDb) await projectService.delete(id);
     setProjects(prev => prev.filter(project => project.id !== id));
     setBudgetEntries(prev => prev.filter(entry => entry.projectId !== id));
 
@@ -693,14 +717,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const addBudgetEntry = (entryData: Omit<BudgetEntry, 'id' | 'createdAt'>) => {
-    const newEntry: BudgetEntry = {
-      ...entryData,
-      unitId: entryData.unitId ?? projects.find(p => p.id === entryData.projectId)?.unitId,
-      divisionId: entryData.divisionId ?? units.find(u => u.id === (projects.find(p => p.id === entryData.projectId)?.unitId || ''))?.divisionId,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString()
-    };
+  const addBudgetEntry = async (entryData: Omit<BudgetEntry, 'id' | 'createdAt'>) => {
+    let newEntry: BudgetEntry;
+    if (useServerDb) {
+      newEntry = await budgetEntryService.create(entryData);
+    } else {
+      newEntry = { ...entryData, unitId: entryData.unitId ?? projects.find(p => p.id === entryData.projectId)?.unitId, divisionId: entryData.divisionId ?? units.find(u => u.id === (projects.find(p => p.id === entryData.projectId)?.unitId || ''))?.divisionId, id: Date.now().toString(), createdAt: new Date().toISOString() } as BudgetEntry;
+    }
     setBudgetEntries(prev => [...prev, newEntry]);
     
     // Update project spent amount
@@ -744,13 +767,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const updateBudgetEntry = (id: string, updates: Partial<BudgetEntry>) => {
+  const updateBudgetEntry = async (id: string, updates: Partial<BudgetEntry>) => {
     const oldEntry = budgetEntries.find(e => e.id === id);
     if (!oldEntry) return;
-
-    setBudgetEntries(prev => prev.map(entry => 
-      entry.id === id ? { ...entry, ...updates } : entry
-    ));
+    const updated = useServerDb ? await budgetEntryService.update(id, updates) : { ...oldEntry, ...updates } as BudgetEntry;
+    setBudgetEntries(prev => prev.map(entry => (entry.id === id ? updated : entry)));
 
     // Update budget code spent amounts if amount or budget code changed
     if (updates.amount !== undefined || updates.budgetCodeId !== undefined) {
@@ -778,10 +799,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const deleteBudgetEntry = (id: string) => {
+  const deleteBudgetEntry = async (id: string) => {
     const entry = budgetEntries.find(e => e.id === id);
     if (!entry) return;
-
+    if (useServerDb) await budgetEntryService.delete(id);
     // Update project spent amount
     if (entry.type === 'expense') {
       const project = projects.find(p => p.id === entry.projectId);
@@ -802,12 +823,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBudgetEntries(prev => prev.filter(entry => entry.id !== id));
   };
 
-  const addUser = (userData: Omit<User, 'id' | 'createdAt'>) => {
-    const newUser: User = {
-      ...userData,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString()
-    };
+  const addUser = async (userData: Omit<User, 'id' | 'createdAt'>) => {
+    const newUser: User = useServerDb ? await userService.create(userData) : { ...userData, id: Date.now().toString(), createdAt: new Date().toISOString() } as User;
     setUsers(prev => [...prev, newUser]);
 
     // Notify all admins about new user
@@ -822,13 +839,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const updateUser = (id: string, updates: Partial<User>) => {
-    setUsers(prev => prev.map(user => 
-      user.id === id ? { ...user, ...updates } : user
-    ));
+  const updateUser = async (id: string, updates: Partial<User>) => {
+    const next = useServerDb ? await userService.update(id, updates) : undefined;
+    setUsers(prev => prev.map(user => (user.id === id ? (next || { ...user, ...updates }) : user)));
   };
 
-  const deleteUser = (id: string) => {
+  const deleteUser = async (id: string) => {
+    if (useServerDb) await userService.delete(id);
     setUsers(prev => prev.filter(user => user.id !== id));
     // Also remove user from project assignments
     setProjects(prev => prev.map(project => ({
@@ -839,22 +856,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotifications(prev => prev.filter(notification => notification.userId !== id));
   };
 
-  const addBudgetCode = (codeData: Omit<BudgetCode, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const newCode: BudgetCode = {
-      ...codeData,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+  const addBudgetCode = async (codeData: Omit<BudgetCode, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const newCode: BudgetCode = useServerDb ? await budgetCodeService.create(codeData) : { ...codeData, id: Date.now().toString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as BudgetCode;
     setBudgetCodes(prev => [...prev, newCode]);
   };
 
-  const updateBudgetCode = (id: string, updates: Partial<BudgetCode>) => {
-    setBudgetCodes(prev => prev.map(code => 
-      code.id === id 
-        ? { ...code, ...updates, updatedAt: new Date().toISOString() }
-        : code
-    ));
+  const updateBudgetCode = async (id: string, updates: Partial<BudgetCode>) => {
+    const next = useServerDb ? await budgetCodeService.update(id, updates) : undefined;
+    setBudgetCodes(prev => prev.map(code => (code.id === id ? (next || { ...code, ...updates, updatedAt: new Date().toISOString() }) : code)));
     
     // Check for budget alerts if budget was changed
     if (updates.budget !== undefined) {
@@ -862,7 +871,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const deleteBudgetCode = (id: string) => {
+  const deleteBudgetCode = async (id: string) => {
+    if (useServerDb) await budgetCodeService.delete(id);
     setBudgetCodes(prev => prev.filter(code => code.id !== id));
     // Remove budget code from projects
     setProjects(prev => prev.map(project => ({
