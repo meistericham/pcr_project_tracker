@@ -1,0 +1,190 @@
+version: '3.8'
+
+services:
+  # PCR Project Tracker Frontend
+  pcr-tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+      supabase-rest:
+        condition: service_started
+      supabase-auth:
+        condition: service_started
+      supabase-realtime:
+        condition: service_started
+    networks:
+      - pcr-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Supabase Database (PostgreSQL)
+  supabase-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: pcr_tracker
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - supabase_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - pcr-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Supabase API (GoTrue for Auth)
+  supabase-auth:
+    image: supabase/gotrue:latest
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:postgres@supabase-db:5432/pcr_tracker?sslmode=disable
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_URI_ALLOW_LIST: http://localhost:3000
+      GOTRUE_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_DISABLE_SIGNUP: false
+      GOTRUE_MAILER_AUTOCONFIRM: true
+      GOTRUE_SMTP_HOST: mail
+      GOTRUE_SMTP_PORT: 2500
+      GOTRUE_SMTP_USER: fake_mail_user
+      GOTRUE_SMTP_PASS: fake_mail_password
+      GOTRUE_SMTP_ADMIN_EMAIL: admin@example.com
+      GOTRUE_SMTP_SENDER_NAME: PCR Tracker
+    ports:
+      - "9999:9999"
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    networks:
+      - pcr-network
+    restart: unless-stopped
+
+  # Supabase Realtime
+  supabase-realtime:
+    image: supabase/realtime:latest
+    environment:
+      DB_HOST: supabase-db
+      DB_PORT: 5432
+      DB_NAME: pcr_tracker
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      PORT: 4000
+      JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+    ports:
+      - "4000:4000"
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    networks:
+      - pcr-network
+    restart: unless-stopped
+
+  # Supabase REST API
+  supabase-rest:
+    image: postgrest/postgrest:latest
+    environment:
+      PGRST_DB_URI: postgres://postgres:postgres@supabase-db:5432/pcr_tracker
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: your-super-secret-jwt-token-with-at-least-32-characters-long
+      PGRST_DEFAULT_RLS: "1"
+    ports:
+      - "3001:3000"
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    networks:
+      - pcr-network
+    restart: unless-stopped
+
+  # Supabase Edge Functions (for email)
+  supabase-functions:
+    image: supabase/edge-runtime:latest
+    environment:
+      SUPABASE_URL: http://localhost:3000
+      SUPABASE_ANON_KEY: your-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: your-service-role-key
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./supabase/functions:/home/deno/functions
+    depends_on:
+      - supabase-rest
+    networks:
+      - pcr-network
+    restart: unless-stopped
+
+  # Mail Server (for development)
+  mail:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - pcr-network
+    restart: unless-stopped
+
+  # Redis (for caching and sessions)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - pcr-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Reverse Proxy (optional)
+  nginx-proxy:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-proxy.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - pcr-tracker
+      - supabase-rest
+      - supabase-auth
+    networks:
+      - pcr-network
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  supabase_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  pcr-network:
+    driver: bridge
