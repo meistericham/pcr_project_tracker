@@ -8,9 +8,7 @@ import {
   FolderOpen, 
   DollarSign, 
   Users, 
-  AlertTriangle,
-  Calendar,
-  Eye
+  AlertTriangle
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Notification } from '../types';
@@ -47,6 +45,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
         return <FolderOpen className="h-4 w-4 text-blue-500" />;
       case 'budget_alert':
       case 'budget_entry_added':
+      case 'budget_code_alert':
         return <DollarSign className="h-4 w-4 text-red-500" />;
       case 'user_assigned':
         return <Users className="h-4 w-4 text-green-500" />;
@@ -63,6 +62,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
       case 'project_created':
         return 'border-l-blue-500 bg-blue-50 dark:bg-blue-900/20';
       case 'budget_alert':
+      case 'budget_code_alert':
         return 'border-l-red-500 bg-red-50 dark:bg-red-900/20';
       case 'budget_entry_added':
         return 'border-l-orange-500 bg-orange-50 dark:bg-orange-900/20';
@@ -89,7 +89,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
       }
     }
 
-    if (notification.type === 'budget_alert' || notification.type === 'budget_entry_added') {
+    if (notification.type === 'budget_alert' || notification.type === 'budget_entry_added' || notification.type === 'budget_code_alert') {
       setCurrentView('budget');
       onClose();
     }
@@ -249,7 +249,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }
                       </div>
                       
                       {/* Additional notification data */}
-                      {notification.type === 'budget_alert' && notification.data?.percentage && (
+                      {(notification.type === 'budget_alert' || notification.type === 'budget_code_alert') && notification.data?.percentage && (
                         <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded text-xs">
                           <div className="flex items-center space-x-2">
                             <AlertTriangle className="h-3 w-3 text-red-600 dark:text-red-400" />

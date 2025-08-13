@@ -25,6 +25,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import DatabaseSetup from './DatabaseSetup';
 import GoogleSheetsIntegration from './GoogleSheetsIntegration';
 import PasswordChangeModal from './PasswordChangeModal';
+import NotificationTest from './NotificationTest';
 
 const SettingsView = () => {
   const { settings, updateSettings } = useApp();
@@ -439,6 +440,9 @@ const SettingsView = () => {
           </label>
         </div>
       </div>
+      
+      {/* Notification Test Panel */}
+      <NotificationTest />
     </div>
   );
 
