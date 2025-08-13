@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Mail, Send, Users, FileText, DollarSign, X } from 'lucide-react';
+import { Mail, Send, Users, FileText, DollarSign, X, Download } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Project, BudgetEntry } from '../types';
 import { formatMYR } from '../utils/currency';
-import { supabase } from '../lib/supabase';
 
 interface EmailModalProps {
   project?: Project;
@@ -12,7 +12,8 @@ interface EmailModalProps {
 }
 
 const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose }) => {
-  const { users, currentUser } = useApp();
+  const { users } = useApp();
+  const { currentUser } = useAuth();
   const [formData, setFormData] = useState({
     to: [] as string[],
     subject: project ? `Project Update: ${project.name}` : 'Budget Report',
@@ -22,6 +23,7 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
     includeTransactions: true,
   });
   const [isSending, setIsSending] = useState(false);
+  const [emailMethod, setEmailMethod] = useState<'browser' | 'supabase'>('browser');
 
   const projectUsers = project
     ? users.filter(user => project.assignedUsers.includes(user.id) || user.id === project.createdBy)
@@ -40,41 +42,86 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
       const emailContent = generateEmailContent();
       const recipients = formData.to.map(id => users.find(u => u.id === id)?.email).filter(Boolean) as string[];
 
-      const { data, error } = await supabase.functions.invoke('send-email', {
-        body: {
-          to: recipients,
-          subject: formData.subject,
-          content: emailContent,
-          from: currentUser?.email,
-          projectId: project?.id
+      if (emailMethod === 'browser') {
+        // Use browser's mailto functionality
+        const mailtoLink = generateMailtoLink(recipients, formData.subject, emailContent);
+        window.open(mailtoLink, '_blank');
+        
+        // Create notifications for team members
+        for (const userId of formData.to) {
+          try {
+            // This will work if you have Supabase configured
+            const { supabase } = await import('../lib/supabase');
+            await supabase.from('notifications').insert({
+              user_id: userId,
+              type: 'email_sent',
+              title: 'New Email Report',
+              message: `${currentUser?.name} sent you a report: ${formData.subject}`,
+              data: {
+                sender: currentUser?.id,
+                subject: formData.subject,
+                projectId: project?.id
+              },
+              read: false
+            });
+          } catch (error) {
+            console.log('Notification creation failed (expected if no Supabase):', error);
+          }
         }
-      });
-
-      if (error) throw error;
-
-      for (const userId of formData.to) {
-        await supabase.from('notifications').insert({
-          user_id: userId,
-          type: 'email_sent',
-          title: 'New Email Report',
-          message: `${currentUser?.name} sent you a report: ${formData.subject}`,
-          data: {
-            sender: currentUser?.id,
+        
+        alert('Email client opened! Please send the email manually.');
+      } else {
+        // Try Supabase function
+        const { supabase } = await import('../lib/supabase');
+        const { data, error } = await supabase.functions.invoke('send-email', {
+          body: {
+            to: recipients,
             subject: formData.subject,
+            content: emailContent,
+            from: currentUser?.email,
             projectId: project?.id
-          },
-          read: false
+          }
         });
-      }
 
-      alert('Email sent successfully!');
+        if (error) throw error;
+
+        // Create notifications
+        for (const userId of formData.to) {
+          await supabase.from('notifications').insert({
+            user_id: userId,
+            type: 'email_sent',
+            title: 'New Email Report',
+            message: `${currentUser?.name} sent you a report: ${formData.subject}`,
+            data: {
+              sender: currentUser?.id,
+              subject: formData.subject,
+              projectId: project?.id
+            },
+            read: false
+          });
+        }
+
+        alert('Email sent successfully!');
+      }
+      
       onClose();
     } catch (error) {
       console.error('Failed to send email:', error);
-      alert('Failed to send email. Please try again.');
+      alert('Failed to send email. Please try again or use the browser method.');
+      // Fallback to browser method
+      setEmailMethod('browser');
     } finally {
       setIsSending(false);
     }
+  };
+
+  const generateMailtoLink = (recipients: string[], subject: string, content: string) => {
+    const mailtoParams = new URLSearchParams({
+      to: recipients.join(','),
+      subject: subject,
+      body: content
+    });
+    return `mailto:?${mailtoParams.toString()}`;
   };
 
   const generateEmailContent = () => {
@@ -116,9 +163,22 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
     return content;
   };
 
+  const downloadEmailContent = () => {
+    const content = generateEmailContent();
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `email-report-${project?.name || 'budget'}-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3">
@@ -137,13 +197,46 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
 
         {/* Form */}
         <div className="p-6 space-y-6">
+          {/* Email Method Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Email Method
+            </label>
+            <div className="space-y-2">
+              <label className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  value="browser"
+                  checked={emailMethod === 'browser'}
+                  onChange={(e) => setEmailMethod(e.target.value as 'browser' | 'supabase')}
+                  className="text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Browser Email Client (Opens your default email app)
+                </span>
+              </label>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  value="supabase"
+                  checked={emailMethod === 'supabase'}
+                  onChange={(e) => setEmailMethod(e.target.value as 'browser' | 'supabase')}
+                  className="text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  Direct Send (Requires Supabase Edge Function)
+                </span>
+              </label>
+            </div>
+          </div>
+
           {/* Recipients */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               <Users className="inline h-4 w-4 mr-1" />
               Recipients
             </label>
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-40 overflow-y-auto">
               {projectUsers.map(user => (
                 <label
                   key={user.id}
@@ -262,26 +355,36 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-700">
           <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+            onClick={downloadEmailContent}
+            className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
           >
-            Cancel
+            <Download className="h-4 w-4" />
+            <span>Download Content</span>
           </button>
-          <button
-            onClick={handleSend}
-            disabled={isSending || formData.to.length === 0}
-            className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSending ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            <span>{isSending ? 'Sending...' : 'Send Email'}</span>
-          </button>
+          
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSend}
+              disabled={isSending || formData.to.length === 0}
+              className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSending ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              <span>{isSending ? 'Sending...' : emailMethod === 'browser' ? 'Open Email Client' : 'Send Email'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
