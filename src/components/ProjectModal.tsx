@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, DollarSign, Users, Hash, AlertTriangle } from 'lucide-react';
+import { X, Calendar, Users, Hash, AlertTriangle } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Project } from '../types';
@@ -38,12 +38,12 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) => {
         description: project.description,
         status: project.status,
         priority: project.priority,
-        startDate: project.startDate,
-        endDate: project.endDate,
-        budget: project.budget.toString(),
+        startDate: project.startDate || '',
+        endDate: project.endDate || '',
+        budget: String(project.budget ?? 0),
         assignedUsers: project.assignedUsers,
         budgetCodes: project.budgetCodes || [],
-        unitId: project.unitId,
+        unitId: project.unitId || '',
         divisionId: units.find(u => u.id === project.unitId)?.divisionId || ''
       });
     }
@@ -96,10 +96,10 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) => {
     }));
   };
 
-  const getBudgetCodeDisplay = (codeId: string) => {
-    const code = budgetCodes.find(c => c.id === codeId);
-    return code ? `${code.code} - ${code.name}` : 'Unknown Code';
-  };
+  // const getBudgetCodeDisplay = (codeId: string) => {
+  //   const code = budgetCodes.find(c => c.id === codeId);
+  //   return code ? `${code.code} - ${code.name}` : 'Unknown Code';
+  // };
 
   // Check if user can edit this project
   const canEdit = isSuperAdmin || 

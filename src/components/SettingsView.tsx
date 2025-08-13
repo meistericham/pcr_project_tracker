@@ -23,6 +23,7 @@ import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import DatabaseSetup from './DatabaseSetup';
+import DatabaseStatus from './DatabaseStatus';
 import GoogleSheetsIntegration from './GoogleSheetsIntegration';
 import PasswordChangeModal from './PasswordChangeModal';
 import NotificationTest from './NotificationTest';
@@ -485,6 +486,9 @@ const SettingsView = () => {
 
   const renderDatabaseSettings = () => (
     <div className="space-y-6">
+      {/* Database Status */}
+      <DatabaseStatus />
+      
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-3">
@@ -503,15 +507,6 @@ const SettingsView = () => {
         </div>
         
         <div className="space-y-4">
-          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-            <h4 className="font-medium text-blue-900 dark:text-blue-300 mb-2">
-              Current Database Status
-            </h4>
-            <p className="text-sm text-blue-800 dark:text-blue-400">
-              Currently using in-memory storage. Set up Supabase for persistent data storage, real-time sync, and production deployment.
-            </p>
-          </div>
-
           <div className="space-y-3">
             <h4 className="font-medium text-gray-900 dark:text-white">Available Database Options:</h4>
             

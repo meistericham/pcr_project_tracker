@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   Plus, 
   Hash, 
@@ -95,23 +95,9 @@ const BudgetCodesView = () => {
     overBudget: budgetCodes.filter(c => c.spent > c.budget).length
   };
 
+  // Allow read-only for all authenticated users; block UI-only actions below
   if (!isAdmin) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <div className="text-center p-8">
-          <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            Access Restricted
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            Only administrators can access budget code management.
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Contact your system administrator if you need access to this feature.
-          </p>
-        </div>
-      </div>
-    );
+    // Render read-only view below (no early return)
   }
 
   return (
@@ -129,63 +115,83 @@ const BudgetCodesView = () => {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Budget Code</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Budget Code</span>
+            </button>
+          )}
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Allocated</p>
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6 mb-8">
+          {/* Total Allocated */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 h-32 flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0 pr-3">
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                  Total Allocated
+                </p>
+                <p 
+                  className="text-base sm:text-lg lg:text-xl font-bold text-blue-600 dark:text-blue-400 leading-tight mt-8"
+                  title={formatMYR(totalAllocatedBudget)}
+                >
                   {formatMYR(totalAllocatedBudget)}
                 </p>
               </div>
-              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Spent</p>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+          {/* Total Spent */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 h-32 flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0 pr-3">
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                  Total Spent
+                </p>
+                <p 
+                  className="text-base sm:text-lg lg:text-xl font-bold text-red-600 dark:text-red-400 leading-tight mt-8"
+                  title={formatMYR(totalSpentBudget)}
+                >
                   {formatMYR(totalSpentBudget)}
                 </p>
               </div>
-              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-red-600 dark:text-red-400" />
+              <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                <TrendingUp className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Remaining</p>
-                <p className={`text-2xl font-bold ${
-                  totalAllocatedBudget - totalSpentBudget >= 0 
-                    ? 'text-green-600 dark:text-green-400' 
-                    : 'text-red-600 dark:text-red-400'
-                }`}>
+          {/* Remaining */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 h-32 flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0 pr-3">
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                  Remaining
+                </p>
+                <p 
+                  className={`text-base sm:text-lg lg:text-xl font-bold leading-tight mt-8 ${
+                    totalAllocatedBudget - totalSpentBudget >= 0 
+                      ? 'text-green-600 dark:text-green-400' 
+                      : 'text-red-600 dark:text-red-400'
+                  }`}
+                  title={formatMYR(totalAllocatedBudget - totalSpentBudget)}
+                >
                   {formatMYR(totalAllocatedBudget - totalSpentBudget)}
                 </p>
               </div>
-              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
                 totalAllocatedBudget - totalSpentBudget >= 0 
                   ? 'bg-green-100 dark:bg-green-900/30' 
                   : 'bg-red-100 dark:bg-red-900/30'
               }`}>
-                <BarChart3 className={`h-6 w-6 ${
+                <BarChart3 className={`h-5 w-5 ${
                   totalAllocatedBudget - totalSpentBudget >= 0 
                     ? 'text-green-600 dark:text-green-400' 
                     : 'text-red-600 dark:text-red-400'
@@ -194,30 +200,42 @@ const BudgetCodesView = () => {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Codes</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+          {/* Active Codes */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 h-32 flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0 pr-3">
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                  Active Codes
+                </p>
+                <p 
+                  className="text-base sm:text-lg lg:text-xl font-bold text-green-600 dark:text-green-400 leading-tight mt-8"
+                  title={`${statusStats.active} active budget codes`}
+                >
                   {statusStats.active}
                 </p>
               </div>
-              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
-                <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+              <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Over Budget</p>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+          {/* Over Budget */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 h-32 flex flex-col justify-between">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0 pr-3">
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                  Over Budget
+                </p>
+                <p 
+                  className="text-base sm:text-lg lg:text-xl font-bold text-red-600 dark:text-red-400 leading-tight mt-8"
+                  title={`${statusStats.overBudget} budget codes over allocated limit`}
+                >
                   {statusStats.overBudget}
                 </p>
               </div>
-              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
-                <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+              <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
             </div>
           </div>
@@ -290,24 +308,28 @@ const BudgetCodesView = () => {
                   </div>
                   
                   <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => handleToggleStatus(code)}
-                      className={`p-1 rounded ${
-                        code.isActive 
-                          ? 'text-red-500 hover:text-red-700' 
-                          : 'text-green-500 hover:text-green-700'
-                      }`}
-                      title={code.isActive ? 'Deactivate' : 'Activate'}
-                    >
-                      {code.isActive ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-                    </button>
-                    <button
-                      onClick={() => handleEdit(code)}
-                      className="p-1 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400"
-                      title="Edit Budget Code"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </button>
+                    {isAdmin && (
+                      <>
+                        <button
+                          onClick={() => handleToggleStatus(code)}
+                          className={`p-1 rounded ${
+                            code.isActive 
+                              ? 'text-red-500 hover:text-red-700' 
+                              : 'text-green-500 hover:text-green-700'
+                          }`}
+                          title={code.isActive ? 'Deactivate' : 'Activate'}
+                        >
+                          {code.isActive ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                        </button>
+                        <button
+                          onClick={() => handleEdit(code)}
+                          className="p-1 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400"
+                          title="Edit Budget Code"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
                     {isSuperAdmin && (
                       <button
                         onClick={() => handleDelete(code)}

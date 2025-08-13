@@ -1,10 +1,59 @@
 import { createClient } from '@supabase/supabase-js';
 
-// These would be your actual Supabase credentials
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key';
+// Supabase configuration
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://demo.supabase.co';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'demo-key';
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+// Create Supabase client with enhanced options
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  }
+});
+
+// Helper function to check if Supabase is properly configured
+export const isSupabaseConfigured = (): boolean => {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  
+  return !!(url && key && 
+    url !== 'https://your-project.supabase.co' && 
+    url !== 'https://demo.supabase.co' &&
+    key !== 'your-anon-key' &&
+    key !== 'demo-key'
+  );
+};
+
+// Helper function to test database connection
+export const testSupabaseConnection = async (): Promise<boolean> => {
+  try {
+    if (!isSupabaseConfigured()) {
+      console.warn('Supabase not configured properly');
+      return false;
+    }
+    
+    // Test with a simple query
+    const { error } = await supabase.from('users').select('count', { count: 'exact', head: true });
+    
+    if (error) {
+      console.error('Supabase connection test failed:', error.message);
+      return false;
+    }
+    
+    console.log('Supabase connection successful');
+    return true;
+  } catch (error) {
+    console.error('Supabase connection error:', error);
+    return false;
+  }
+};
 
 // Database schema types
 export interface Database {

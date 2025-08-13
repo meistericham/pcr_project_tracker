@@ -7,7 +7,7 @@ interface UserProfileModalProps {
 }
 
 const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, updateProfileName } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -65,6 +65,8 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({ onClose }) => {
       };
       
       localStorage.setItem(`userProfile_${currentUser?.id}`, JSON.stringify(profileData));
+      // Update display name in auth context and persisted session
+      updateProfileName(formData.name);
       
       setSuccess(true);
       setTimeout(() => {

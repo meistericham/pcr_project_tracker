@@ -8,9 +8,9 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<User>;
   logout: () => void;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  updateProfileName: (newName: string) => void;
+  adminResetPassword: (email: string, newPassword: string) => Promise<void>;
   isLoading: boolean;
-  loginAttempts: number;
-  isLocked: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,9 +23,7 @@ export const useAuth = () => {
   return context;
 };
 
-// Rate limiting configuration
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
+// Removed login attempt/lockout feature per security policy
 
 // Predefined users with credentials (in production, this should be in a secure database)
 const PREDEFINED_USERS = [
@@ -70,8 +68,6 @@ const PREDEFINED_USERS = [
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [loginAttempts, setLoginAttempts] = useState(0);
-  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
   const [userPasswords, setUserPasswords] = useState<Record<string, string>>(() => {
     // Initialize with predefined passwords
     const passwords: Record<string, string> = {};
@@ -91,26 +87,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return passwords;
   });
 
-  // Check if account is locked
-  const isLocked = lockoutUntil ? Date.now() < lockoutUntil : false;
+  // Helpers for hashing passwords using Web Crypto API (hex string)
+  const isHexHash = (value: string) => /^[a-f0-9]{64}$/i.test(value);
+  const hashPassword = async (password: string): Promise<string> => {
+    const enc = new TextEncoder();
+    const data = enc.encode(password);
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    const bytes = Array.from(new Uint8Array(digest));
+    return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
+  };
 
-  // Load lockout state from localStorage
-  useEffect(() => {
-    const storedLockout = localStorage.getItem('authLockoutUntil');
-    if (storedLockout) {
-      const lockoutTime = parseInt(storedLockout, 10);
-      if (Date.now() < lockoutTime) {
-        setLockoutUntil(lockoutTime);
-      } else {
-        localStorage.removeItem('authLockoutUntil');
-      }
-    }
-
-    const storedAttempts = localStorage.getItem('authLoginAttempts');
-    if (storedAttempts) {
-      setLoginAttempts(parseInt(storedAttempts, 10));
-    }
-  }, []);
+  // Removed lockout/attempt initialization
 
   useEffect(() => {
     // Check for stored user session
@@ -118,13 +105,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (storedUser) {
       try {
         const user = JSON.parse(storedUser);
-        // Validate that the stored user still exists in our system
-        const validUser = PREDEFINED_USERS.find(u => u.email === user.email);
-        if (validUser) {
-          setCurrentUser(user);
-        } else {
-          localStorage.removeItem('currentUser');
-        }
+        // Restore any previously authenticated user (predefined or ad-hoc)
+        setCurrentUser(user);
       } catch (error) {
         localStorage.removeItem('currentUser');
       }
@@ -132,24 +114,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
   }, []);
 
-  const handleFailedLogin = useCallback(() => {
-    const newAttempts = loginAttempts + 1;
-    setLoginAttempts(newAttempts);
-    localStorage.setItem('authLoginAttempts', newAttempts.toString());
-
-    if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
-      const lockoutTime = Date.now() + LOCKOUT_DURATION;
-      setLockoutUntil(lockoutTime);
-      localStorage.setItem('authLockoutUntil', lockoutTime.toString());
-    }
-  }, [loginAttempts]);
-
-  const resetLoginAttempts = useCallback(() => {
-    setLoginAttempts(0);
-    setLockoutUntil(null);
-    localStorage.removeItem('authLoginAttempts');
-    localStorage.removeItem('authLockoutUntil');
-  }, []);
+  const handleFailedLogin = useCallback(() => {}, []);
+  const resetLoginAttempts = useCallback(() => {}, []);
 
   const login = async (email: string, password: string): Promise<User> => {
     // Input validation
@@ -161,20 +127,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Password must be at least 6 characters long');
     }
 
-    // Check if account is locked
-    if (isLocked) {
-      const remainingTime = Math.ceil((lockoutUntil! - Date.now()) / 60000);
-      throw new Error(`Account is temporarily locked. Please try again in ${remainingTime} minutes.`);
-    }
-
     // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 300));
 
-    // Check predefined users first
+    // Check predefined users first (migrate to hashed on first login)
     const predefinedUser = PREDEFINED_USERS.find(user => user.email === email);
     if (predefinedUser) {
       const storedPassword = userPasswords[email];
-      if (storedPassword === password) {
+      const inputHash = await hashPassword(password);
+      const matches = isHexHash(storedPassword)
+        ? storedPassword === inputHash
+        : storedPassword === password;
+      if (matches) {
         const user: User = {
           id: predefinedUser.id,
           name: predefinedUser.name,
@@ -185,6 +149,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
         setCurrentUser(user);
         localStorage.setItem('currentUser', JSON.stringify(user));
+        // Migrate to hashed storage if needed
+        if (!isHexHash(storedPassword)) {
+          const updated = { ...userPasswords, [email]: inputHash };
+          setUserPasswords(updated);
+          localStorage.setItem('userPasswords', JSON.stringify(updated));
+        }
         resetLoginAttempts();
         return user;
       } else {
@@ -193,20 +163,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // For demo purposes, allow any other email/password combination
-    const user: User = {
-      id: Date.now().toString(),
-      name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-      email,
-      role: 'user',
-      initials: email.substring(0, 2).toUpperCase(),
-      createdAt: new Date().toISOString()
-    };
-
-    setCurrentUser(user);
-    localStorage.setItem('currentUser', JSON.stringify(user));
-    resetLoginAttempts();
-    return user;
+    // Strict auth: only allow existing users from stored user list
+    try {
+      const storedUsersRaw = localStorage.getItem('pcr_users');
+      const storedUsers: User[] = storedUsersRaw ? JSON.parse(storedUsersRaw) : [];
+      const existing = storedUsers.find(u => u.email === email);
+      if (!existing) {
+        handleFailedLogin();
+        throw new Error('Account not found or inactive');
+      }
+      const storedPassword = userPasswords[email];
+      if (!storedPassword) {
+        handleFailedLogin();
+        throw new Error('Account not found or inactive');
+      }
+      const inputHash = await hashPassword(password);
+      const ok = isHexHash(storedPassword)
+        ? storedPassword === inputHash
+        : storedPassword === password;
+      if (!ok) {
+        handleFailedLogin();
+        throw new Error('Invalid email or password');
+      }
+      const user: User = existing;
+      setCurrentUser(user);
+      localStorage.setItem('currentUser', JSON.stringify(user));
+      // Migrate to hashed storage if needed
+      if (!isHexHash(storedPassword)) {
+        const updated = { ...userPasswords, [email]: inputHash };
+        setUserPasswords(updated);
+        localStorage.setItem('userPasswords', JSON.stringify(updated));
+      }
+      resetLoginAttempts();
+      return user;
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      throw new Error('Authentication failed');
+    }
   };
 
   const logout = () => {
@@ -233,18 +226,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Verify current password
     const storedPassword = userPasswords[currentUser.email];
-    if (storedPassword !== currentPassword) {
+    const currentHash = await hashPassword(currentPassword);
+    const matches = isHexHash(storedPassword)
+      ? storedPassword === currentHash
+      : storedPassword === currentPassword;
+    if (!matches) {
       throw new Error('Current password is incorrect');
     }
 
     // Update password
-    const updatedPasswords = {
-      ...userPasswords,
-      [currentUser.email]: newPassword
-    };
+    const newHash = await hashPassword(newPassword);
+    const updatedPasswords = { ...userPasswords, [currentUser.email]: newHash };
     
     setUserPasswords(updatedPasswords);
     localStorage.setItem('userPasswords', JSON.stringify(updatedPasswords));
+  };
+
+  const updateProfileName = (newName: string) => {
+    if (!currentUser) return;
+    const updatedUser = { ...currentUser, name: newName };
+    setCurrentUser(updatedUser);
+    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+  };
+
+  const adminResetPassword = async (email: string, newPassword: string) => {
+    const newHash = await hashPassword(newPassword);
+    const updated = { ...userPasswords, [email]: newHash };
+    setUserPasswords(updated);
+    localStorage.setItem('userPasswords', JSON.stringify(updated));
   };
 
   const value = {
@@ -253,9 +262,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     login,
     logout,
     changePassword,
-    isLoading,
-    loginAttempts,
-    isLocked
+    updateProfileName,
+    adminResetPassword,
+    isLoading
   };
 
   return (

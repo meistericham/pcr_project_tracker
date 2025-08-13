@@ -11,6 +11,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Notification } from '../types';
 
 interface NotificationPanelProps {
@@ -21,13 +22,13 @@ interface NotificationPanelProps {
 const NotificationPanel: React.FC<NotificationPanelProps> = ({ isOpen, onClose }) => {
   const { 
     notifications, 
-    currentUser, 
     markNotificationAsRead, 
     markAllNotificationsAsRead, 
     deleteNotification,
     setCurrentView,
     projects
   } = useApp();
+  const { currentUser } = useAuth();
   
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 

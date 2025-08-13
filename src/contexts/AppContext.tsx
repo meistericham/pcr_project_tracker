@@ -100,7 +100,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentView, setCurrentView] = useState<ViewMode>('projects');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const useServerDb = (import.meta as any).env?.VITE_USE_SERVER_DB === 'true';
+  const useServerDb = import.meta.env.VITE_USE_SERVER_DB === 'true';
 
   // Create debounced save functions
   const debouncedSaveUsers = React.useMemo(() => createDebouncedSave(STORAGE_KEYS.USERS), []);
@@ -702,6 +702,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteProject = async (id: string) => {
     const project = projects.find(p => p.id === id);
     if (!project) return;
+    // Authorization: only super admins can delete any project; admins can delete projects they created; users cannot delete
+    const isSuperAdmin = currentUser?.role === 'super_admin';
+    const isAdmin = currentUser?.role === 'admin';
+    const canDelete = !!currentUser && (isSuperAdmin || (isAdmin && project.createdBy === currentUser.id));
+    if (!canDelete) {
+      // Silently ignore or log; optional: add a notification later
+      return;
+    }
     if (useServerDb) await projectService.delete(id);
     setProjects(prev => prev.filter(project => project.id !== id));
     setBudgetEntries(prev => prev.filter(entry => entry.projectId !== id));

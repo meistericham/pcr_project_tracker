@@ -1,16 +1,118 @@
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured, testSupabaseConnection } from './supabase';
 import { User, Project, BudgetEntry, BudgetCode, Notification } from '../types';
+
+// Helper function to handle database errors gracefully
+const handleDatabaseError = (error: any, operation: string) => {
+  console.error(`Database operation failed (${operation}):`, error);
+  
+  // Check if it's a connection error
+  if (error.message?.includes('network') || error.message?.includes('fetch')) {
+    throw new Error(`Network error during ${operation}. Please check your internet connection.`);
+  }
+  
+  // Check if it's an authentication error
+  if (error.message?.includes('JWT') || error.message?.includes('unauthorized')) {
+    throw new Error(`Authentication error during ${operation}. Please check your Supabase credentials.`);
+  }
+  
+  // Check if it's a table/schema error
+  if (error.message?.includes('relation') || error.message?.includes('does not exist')) {
+    throw new Error(`Database schema error during ${operation}. Please run the database migration.`);
+  }
+  
+  throw error;
+};
+
+// Transform functions to convert database rows to app types
+const transformUser = (dbUser: any): User => ({
+  id: dbUser.id,
+  name: dbUser.name,
+  email: dbUser.email,
+  role: dbUser.role,
+  initials: dbUser.initials,
+  createdAt: dbUser.created_at
+});
+
+const transformProject = (dbProject: any): Project => ({
+  id: dbProject.id,
+  name: dbProject.name,
+  description: dbProject.description,
+  status: dbProject.status,
+  priority: dbProject.priority,
+  startDate: dbProject.start_date,
+  endDate: dbProject.end_date,
+  budget: dbProject.budget,
+  spent: dbProject.spent,
+  unitId: dbProject.unit_id || '',
+  assignedUsers: dbProject.assigned_users || [],
+  budgetCodes: dbProject.budget_codes || [],
+  createdBy: dbProject.created_by,
+  createdAt: dbProject.created_at,
+  updatedAt: dbProject.updated_at
+});
+
+const transformBudgetCode = (dbCode: any): BudgetCode => ({
+  id: dbCode.id,
+  code: dbCode.code,
+  name: dbCode.name,
+  description: dbCode.description,
+  budget: dbCode.budget,
+  spent: dbCode.spent,
+  isActive: dbCode.is_active,
+  createdBy: dbCode.created_by,
+  createdAt: dbCode.created_at,
+  updatedAt: dbCode.updated_at
+});
+
+const transformBudgetEntry = (dbEntry: any): BudgetEntry => ({
+  id: dbEntry.id,
+  projectId: dbEntry.project_id,
+  budgetCodeId: dbEntry.budget_code_id,
+  description: dbEntry.description,
+  amount: dbEntry.amount,
+  type: dbEntry.type,
+  category: dbEntry.category,
+  date: dbEntry.date,
+  createdBy: dbEntry.created_by,
+  createdAt: dbEntry.created_at,
+  unitId: dbEntry.unit_id,
+  divisionId: dbEntry.division_id
+});
+
+const transformNotification = (dbNotification: any): Notification => ({
+  id: dbNotification.id,
+  userId: dbNotification.user_id,
+  type: dbNotification.type,
+  title: dbNotification.title,
+  message: dbNotification.message,
+  data: dbNotification.data,
+  read: dbNotification.read,
+  createdAt: dbNotification.created_at,
+  actionUrl: dbNotification.action_url
+});
 
 // User operations
 export const userService = {
   async getAll(): Promise<User[]> {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data.map(transformUser);
+    try {
+      if (!isSupabaseConfigured()) {
+        throw new Error('Supabase not configured');
+      }
+      
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        handleDatabaseError(error, 'fetch users');
+      }
+      
+      return data?.map(transformUser) || [];
+    } catch (error) {
+      handleDatabaseError(error, 'fetch users');
+      return [];
+    }
   },
 
   async create(user: Omit<User, 'id' | 'createdAt'>): Promise<User> {
@@ -307,77 +409,3 @@ export const notificationService = {
   }
 };
 
-// Transform functions to convert database format to app format
-function transformUser(data: any): User {
-  return {
-    id: data.id,
-    name: data.name,
-    email: data.email,
-    role: data.role,
-    initials: data.initials,
-    createdAt: data.created_at
-  };
-}
-
-function transformBudgetCode(data: any): BudgetCode {
-  return {
-    id: data.id,
-    code: data.code,
-    name: data.name,
-    description: data.description,
-    budget: data.budget,
-    spent: data.spent,
-    isActive: data.is_active,
-    createdBy: data.created_by,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at
-  };
-}
-
-function transformProject(data: any): Project {
-  return {
-    id: data.id,
-    name: data.name,
-    description: data.description,
-    status: data.status,
-    priority: data.priority,
-    startDate: data.start_date,
-    endDate: data.end_date,
-    budget: data.budget,
-    spent: data.spent,
-    assignedUsers: data.assigned_users,
-    budgetCodes: data.budget_codes,
-    createdBy: data.created_by,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at
-  };
-}
-
-function transformBudgetEntry(data: any): BudgetEntry {
-  return {
-    id: data.id,
-    projectId: data.project_id,
-    budgetCodeId: data.budget_code_id,
-    description: data.description,
-    amount: data.amount,
-    type: data.type,
-    category: data.category,
-    date: data.date,
-    createdBy: data.created_by,
-    createdAt: data.created_at
-  };
-}
-
-function transformNotification(data: any): Notification {
-  return {
-    id: data.id,
-    userId: data.user_id,
-    type: data.type,
-    title: data.title,
-    message: data.message,
-    data: data.data,
-    read: data.read,
-    createdAt: data.created_at,
-    actionUrl: data.action_url
-  };
-}

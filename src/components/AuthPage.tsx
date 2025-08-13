@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Building2, AlertTriangle } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Building2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const AuthPage: React.FC = () => {
-  const { login, loginAttempts, isLocked } = useAuth();
-  const [isSignUp, setIsSignUp] = useState(false);
+  const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -21,15 +20,6 @@ const AuthPage: React.FC = () => {
     setError('');
 
     try {
-      if (isSignUp) {
-        if (formData.password !== formData.confirmPassword) {
-          throw new Error('Passwords do not match');
-        }
-        if (formData.password.length < 6) {
-          throw new Error('Password must be at least 6 characters');
-        }
-      }
-      
       await login(formData.email, formData.password);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
@@ -38,37 +28,8 @@ const AuthPage: React.FC = () => {
     }
   };
 
-  const getLockoutMessage = () => {
-    if (!isLocked) return null;
-    
-    const remainingAttempts = 5 - loginAttempts;
-    return (
-      <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg mb-4">
-        <div className="flex items-center space-x-2">
-          <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-          <p className="text-sm text-red-600 dark:text-red-400">
-            Too many failed attempts. Please try again later.
-          </p>
-        </div>
-      </div>
-    );
-  };
-
-  const getAttemptsWarning = () => {
-    if (loginAttempts === 0 || isLocked) return null;
-    
-    const remainingAttempts = 5 - loginAttempts;
-    return (
-      <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg mb-4">
-        <div className="flex items-center space-x-2">
-          <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-          <p className="text-sm text-yellow-600 dark:text-yellow-400">
-            {remainingAttempts} login attempt{remainingAttempts !== 1 ? 's' : ''} remaining
-          </p>
-        </div>
-      </div>
-    );
-  };
+  const getLockoutMessage = () => null;
+  const getAttemptsWarning = () => null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
@@ -79,11 +40,9 @@ const AuthPage: React.FC = () => {
             <Building2 className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            PCR Tracker
+            PCR Project & Budget Tracker
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            {isSignUp ? 'Create your account' : 'Welcome back'}
-          </p>
+          <p className="text-gray-600 dark:text-gray-400">Welcome back</p>
         </div>
 
         {/* Auth Form */}
@@ -92,26 +51,6 @@ const AuthPage: React.FC = () => {
           {getAttemptsWarning()}
           
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Name field for sign up */}
-            {isSignUp && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    placeholder="Enter your full name"
-                  />
-                </div>
-              </div>
-            )}
-
             {/* Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -126,7 +65,6 @@ const AuthPage: React.FC = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   placeholder="Enter your email"
-                  disabled={isLocked}
                 />
               </div>
             </div>
@@ -145,39 +83,16 @@ const AuthPage: React.FC = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   className="w-full pl-10 pr-12 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   placeholder="Enter your password"
-                  disabled={isLocked}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  disabled={isLocked}
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
             </div>
-
-            {/* Confirm Password for sign up */}
-            {isSignUp && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    placeholder="Confirm your password"
-                    disabled={isLocked}
-                  />
-                </div>
-              </div>
-            )}
 
             {/* Error Message */}
             {error && (
@@ -189,47 +104,28 @@ const AuthPage: React.FC = () => {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading || isLocked}
+              disabled={isLoading}
               className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-lg hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
             >
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
                 <>
-                  <span>{isSignUp ? 'Create Account' : 'Sign In'}</span>
+                  <span>Sign In</span>
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}
             </button>
           </form>
-
-          {/* Toggle Sign In/Sign Up */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {isSignUp ? 'Already have an account?' : "Don't have an account?"}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSignUp(!isSignUp);
-                  setError('');
-                  setFormData({ name: '', email: '', password: '', confirmPassword: '' });
-                }}
-                className="ml-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
-                disabled={isLocked}
-              >
-                {isSignUp ? 'Sign in' : 'Sign up'}
-              </button>
-            </p>
-          </div>
         </div>
 
         {/* Footer */}
         <div className="text-center mt-8">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            © 2024 PCR Tracker. All rights reserved.
+            © 2025 PCR Project & Budget Tracker. All rights reserved.
           </p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-            Developed by Mohd Hisyamudin with AI Coding Assistant
+            Developed by Crafted by Mohd Hisyamudin · Powered by AI
           </p>
         </div>
       </div>

@@ -17,6 +17,7 @@ import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { User as UserType } from '../types';
 import UserModal from './UserModal';
+import EmailModal from './EmailModal';
 
 const UsersView = () => {
   const { users, deleteUser } = useApp();
@@ -25,6 +26,7 @@ const UsersView = () => {
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'super_admin' | 'admin' | 'user'>('all');
+  const [resetTarget, setResetTarget] = useState<UserType | null>(null);
 
   const isSuperAdmin = currentUser?.role === 'super_admin';
 
@@ -80,6 +82,14 @@ const UsersView = () => {
     if (window.confirm(`Are you sure you want to delete ${user.name}? This action cannot be undone.`)) {
       deleteUser(user.id);
     }
+  };
+
+  const handleResetPassword = (user: UserType) => {
+    if (!isSuperAdmin) {
+      alert('Only Super Admins can reset passwords.');
+      return;
+    }
+    setResetTarget(user);
   };
 
   const handleCloseModal = () => {
@@ -226,7 +236,7 @@ const UsersView = () => {
 
         {/* Users Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredUsers.map((user) => (
+          {filteredUsers.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((user) => (
             <div
               key={user.id}
               className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-all duration-200 group"
@@ -255,6 +265,15 @@ const UsersView = () => {
                   >
                     <Edit3 className="h-4 w-4" />
                   </button>
+                  {user.id !== currentUser?.id && (
+                    <button
+                      onClick={() => handleResetPassword(user)}
+                      className="p-1 text-gray-400 dark:text-gray-500 hover:text-orange-600 dark:hover:text-orange-400"
+                      title="Reset Password"
+                    >
+                      <Shield className="h-4 w-4" />
+                    </button>
+                  )}
                   {user.id !== currentUser?.id && (
                     <button
                       onClick={() => handleDelete(user)}
@@ -396,6 +415,15 @@ const UsersView = () => {
         <UserModal
           user={editingUser}
           onClose={handleCloseModal}
+        />
+      )}
+
+      {/* Reset Password flow – simple email compose with generated temp password (manual send) */}
+      {resetTarget && (
+        <EmailModal
+          onClose={() => setResetTarget(null)}
+          project={undefined}
+          budgetEntries={undefined}
         />
       )}
     </div>

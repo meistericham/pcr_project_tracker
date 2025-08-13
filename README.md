@@ -170,6 +170,39 @@ The app includes mock data and in-memory storage for development and testing pur
 - **Admin**: Project and budget management, limited user access
 - **User**: View projects and budgets, basic collaboration
 
+### **Roles & Permissions Details**
+
+The application enforces fine-grained permissions for common actions. Key rules:
+
+- **Projects**
+  - **Super Admin**: Create, edit, and delete any project. Can assign any users. Can change budget and status.
+  - **Admin**: 
+    - Create new projects.
+    - Edit projects they created OR projects they are assigned to.
+    - Can assign users, and can change budget and status on those projects.
+    - Delete only projects they created.
+  - **User**:
+    - Create new projects.
+    - Edit projects they created OR projects they are assigned to.
+    - Cannot change budget or status; can only assign themselves.
+    - Cannot delete projects.
+
+- **Budget Codes**
+  - **Super Admin/Admin**: Create, update, delete, toggle active status.
+  - **User**: Read-only.
+
+- **Users**
+  - **Super Admin/Admin**: Manage users (create, update roles, delete).
+  - **User**: View and edit their own profile only.
+
+- **Settings**
+  - **Super Admin/Admin**: Full access to system settings.
+  - **User**: Read-only access to relevant settings.
+
+- **Why an Admin may not be able to edit a specific project**
+  - By design, an Admin can edit a project only if they created it or they are assigned to it. Super Admins can edit all projects.
+  - This logic is enforced in `ProjectModal` via a `canEdit` check based on role, creator, and assignment.
+
 ### **Budget Policies**
 - Configurable budget alert thresholds
 - Budget approval requirements
