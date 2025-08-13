@@ -20,13 +20,16 @@ import {
 import { useApp } from '../contexts/AppContext';
 import { Project } from '../types';
 import { formatMYR } from '../utils/currency';
+import { formatDate } from '../utils/date';
 import ProjectModal from './ProjectModal';
 import ProjectBudgetBreakdown from './ProjectBudgetBreakdown';
 import ProjectDetailModal from './ProjectDetailModal';
 import EmailModal from './EmailModal';
 
 const ProjectsView = () => {
-  const { projects, users, budgetCodes, budgetEntries, deleteProject } = useApp();
+  const { projects, users, budgetCodes, budgetEntries, deleteProject, divisions, units } = useApp();
+  const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  const [selectedUnit, setSelectedUnit] = useState<string>('all');
   const [showModal, setShowModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [showBudgetBreakdown, setShowBudgetBreakdown] = useState<Project | null>(null);
@@ -132,6 +135,12 @@ const ProjectsView = () => {
     return budgetEntries.filter(entry => entry.projectId === projectId);
   };
 
+  const filteredUnits = selectedDivision === 'all' ? units : units.filter(u => u.divisionId === selectedDivision);
+  const filteredProjectsTop = projects.filter(p =>
+    (selectedDivision === 'all' || filteredUnits.some(u => u.id === p.unitId)) &&
+    (selectedUnit === 'all' || p.unitId === selectedUnit)
+  );
+
   return (
     <div className="w-full h-full">
       <div className="p-4 lg:p-6">
@@ -139,8 +148,26 @@ const ProjectsView = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
           <div className="flex items-center space-x-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              All Projects ({projects.length})
+              All Projects ({filteredProjectsTop.length})
             </h2>
+            <div className="flex items-center space-x-2">
+              <select
+                value={selectedDivision}
+                onChange={(e) => { setSelectedDivision(e.target.value); setSelectedUnit('all'); }}
+                className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+              >
+                <option value="all">All Divisions</option>
+                {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              <select
+                value={selectedUnit}
+                onChange={(e) => setSelectedUnit(e.target.value)}
+                className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+              >
+                <option value="all">All Units</option>
+                {filteredUnits.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
           </div>
           <button
             onClick={() => setShowModal(true)}
@@ -153,7 +180,7 @@ const ProjectsView = () => {
 
         {/* Projects Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
-          {projects.map((project) => {
+          {filteredProjectsTop.map((project) => {
             const budgetPercentage = (project.spent / project.budget) * 100;
             const projectBudgetCodes = getBudgetCodeNames(project.budgetCodes || []);
             
@@ -291,7 +318,7 @@ const ProjectsView = () => {
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
                     <Calendar className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{new Date(project.startDate).toLocaleDateString()} - {new Date(project.endDate).toLocaleDateString()}</span>
+                    <span className="truncate">{formatDate(project.startDate, 'DD/MM/YYYY')} - {formatDate(project.endDate, 'DD/MM/YYYY')}</span>
                   </div>
                   
                   {project.assignedUsers.length > 0 && (

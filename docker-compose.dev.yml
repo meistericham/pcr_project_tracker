@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     ports:
-      - "3000:5173"
+      - "3000:3000"
     environment:
       - NODE_ENV=development
       - VITE_SUPABASE_URL=http://localhost:3001
@@ -16,7 +16,7 @@ services:
     networks:
       - pcr-network
     restart: unless-stopped
-    command: npm run dev -- --host 0.0.0.0
+    command: npm run dev -- --host 0.0.0.0 --port 3000
 
   # Supabase Database (PostgreSQL)
   supabase-db:

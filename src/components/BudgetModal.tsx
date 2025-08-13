@@ -10,8 +10,10 @@ interface BudgetModalProps {
 }
 
 const BudgetModal: React.FC<BudgetModalProps> = ({ entry, onClose }) => {
-  const { addBudgetEntry, updateBudgetEntry, projects, budgetCodes, currentUser } = useApp();
+  const { addBudgetEntry, updateBudgetEntry, projects, budgetCodes, currentUser, divisions, units } = useApp();
   const [formData, setFormData] = useState({
+    divisionId: '',
+    unitId: '',
     projectId: '',
     budgetCodeId: '',
     description: '',
@@ -36,6 +38,8 @@ const BudgetModal: React.FC<BudgetModalProps> = ({ entry, onClose }) => {
 
   // Get available budget codes for selected project
   const selectedProject = projects.find(p => p.id === formData.projectId);
+  const filteredUnits = units.filter(u => !formData.divisionId || u.divisionId === formData.divisionId);
+  const filteredProjects = projects.filter(p => !formData.unitId || p.unitId === formData.unitId);
   const availableBudgetCodes = budgetCodes.filter(code => 
     code.isActive && selectedProject?.budgetCodes.includes(code.id)
   );
@@ -43,6 +47,8 @@ const BudgetModal: React.FC<BudgetModalProps> = ({ entry, onClose }) => {
   useEffect(() => {
     if (entry) {
       setFormData({
+        divisionId: units.find(u => u.id === (projects.find(p => p.id === entry.projectId)?.unitId || ''))?.divisionId || '',
+        unitId: projects.find(p => p.id === entry.projectId)?.unitId || '',
         projectId: entry.projectId,
         budgetCodeId: entry.budgetCodeId || '',
         description: entry.description,
@@ -52,9 +58,11 @@ const BudgetModal: React.FC<BudgetModalProps> = ({ entry, onClose }) => {
         date: entry.date
       });
     } else if (projects.length > 0) {
-      setFormData(prev => ({ ...prev, projectId: projects[0].id }));
+      const firstUnit = units[0]?.id || '';
+      const firstProject = projects.find(p => p.unitId === firstUnit)?.id || projects[0].id;
+      setFormData(prev => ({ ...prev, divisionId: units.find(u => u.id === firstUnit)?.divisionId || '', unitId: firstUnit, projectId: firstProject }));
     }
-  }, [entry, projects]);
+  }, [entry, projects, units]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,7 +110,39 @@ const BudgetModal: React.FC<BudgetModalProps> = ({ entry, onClose }) => {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Project Selection */}
+          {/* Division / Unit / Project Selection */}
+          <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Division</label>
+                <select
+                  required
+                  value={formData.divisionId}
+                  onChange={(e) => setFormData(prev => ({ ...prev, divisionId: e.target.value, unitId: '', projectId: '' }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="">Select division</option>
+                  {divisions.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Unit</label>
+                <select
+                  required
+                  value={formData.unitId}
+                  onChange={(e) => setFormData(prev => ({ ...prev, unitId: e.target.value, projectId: '' }))}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="">Select unit</option>
+                  {filteredUnits.map(u => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Project
@@ -114,7 +154,7 @@ const BudgetModal: React.FC<BudgetModalProps> = ({ entry, onClose }) => {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
               <option value="">Select a project</option>
-              {projects.map(project => (
+              {filteredProjects.map(project => (
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}
             </select>

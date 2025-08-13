@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { Mail, Send, Users, FileText, DollarSign, X, Download } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Mail, Send, Users, FileText, X, Download } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Project, BudgetEntry } from '../types';
 import { formatMYR } from '../utils/currency';
+import { formatDate } from '../utils/date';
+import { validateEmail } from '../utils/validation';
 
 interface EmailModalProps {
   project?: Project;
@@ -24,10 +26,17 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
   });
   const [isSending, setIsSending] = useState(false);
   const [emailMethod, setEmailMethod] = useState<'browser' | 'supabase'>('browser');
+  const [manualEmail, setManualEmail] = useState('');
+  const [manualRecipients, setManualRecipients] = useState<string[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [recipientError, setRecipientError] = useState<string | null>(null);
 
-  const projectUsers = project
-    ? users.filter(user => project.assignedUsers.includes(user.id) || user.id === project.createdBy)
-    : [];
+  const allUsers = users;
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+    if (!q) return allUsers;
+    return allUsers.filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+  }, [userSearch, allUsers]);
 
   const handleUserToggle = (userId: string) => {
     setFormData(prev => ({
@@ -40,7 +49,13 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
     setIsSending(true);
     try {
       const emailContent = generateEmailContent();
-      const recipients = formData.to.map(id => users.find(u => u.id === id)?.email).filter(Boolean) as string[];
+      const selectedEmails = formData.to.map(id => users.find(u => u.id === id)?.email).filter(Boolean) as string[];
+      const recipients = Array.from(new Set([...selectedEmails, ...manualRecipients]));
+      if (recipients.length === 0) {
+        setRecipientError('Please add at least one valid recipient');
+        setIsSending(false);
+        return;
+      }
 
       if (emailMethod === 'browser') {
         // Use browser's mailto functionality
@@ -73,7 +88,7 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
       } else {
         // Try Supabase function
         const { supabase } = await import('../lib/supabase');
-        const { data, error } = await supabase.functions.invoke('send-email', {
+        const { error } = await supabase.functions.invoke('send-email', {
           body: {
             to: recipients,
             subject: formData.subject,
@@ -124,6 +139,22 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
     return `mailto:?${mailtoParams.toString()}`;
   };
 
+  const addManualRecipient = () => {
+    const email = manualEmail.trim();
+    if (!email) return;
+    if (!validateEmail(email)) {
+      setRecipientError('Invalid email address');
+      return;
+    }
+    setRecipientError(null);
+    setManualRecipients(prev => (prev.includes(email) ? prev : [...prev, email]));
+    setManualEmail('');
+  };
+
+  const removeManualRecipient = (email: string) => {
+    setManualRecipients(prev => prev.filter(e => e !== email));
+  };
+
   const generateEmailContent = () => {
     let content = formData.message + '\n\n';
 
@@ -140,7 +171,7 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
     if (budgetEntries && formData.includeTransactions && budgetEntries.length > 0) {
       content += `RECENT TRANSACTIONS:\n`;
       budgetEntries.slice(0, 10).forEach(entry => {
-        content += `- ${entry.date}: ${entry.description} - ${formatMYR(entry.amount)} (${entry.type})\n`;
+        content += `- ${formatDate(entry.date, 'DD/MM/YYYY')}: ${entry.description} - ${formatMYR(entry.amount)} (${entry.type})\n`;
       });
       content += '\n';
     }
@@ -236,28 +267,60 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
               <Users className="inline h-4 w-4 mr-1" />
               Recipients
             </label>
-            <div className="space-y-2 max-h-40 overflow-y-auto">
-              {projectUsers.map(user => (
-                <label
-                  key={user.id}
-                  className="flex items-center space-x-3 p-3 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                placeholder="Search users by name or email"
+              />
+              <div className="max-h-40 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md divide-y divide-gray-200 dark:divide-gray-700">
+                {filteredUsers.map(user => (
+                  <label key={user.id} className="flex items-center space-x-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={formData.to.includes(user.id)}
+                      onChange={() => handleUserToggle(user.id)}
+                      className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
+                    </div>
+                  </label>
+                ))}
+                {filteredUsers.length === 0 && (
+                  <div className="p-3 text-xs text-gray-500 dark:text-gray-400">No users found</div>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center space-x-2">
                   <input
-                    type="checkbox"
-                    checked={formData.to.includes(user.id)}
-                    onChange={() => handleUserToggle(user.id)}
-                    className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                    type="email"
+                    value={manualEmail}
+                    onChange={(e) => setManualEmail(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addManualRecipient(); } }}
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    placeholder="Type email and press Enter"
                   />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {user.name}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {user.email}
-                    </p>
+                  <button type="button" onClick={addManualRecipient} className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Add</button>
+                </div>
+                {recipientError && (
+                  <p className="mt-1 text-xs text-red-600">{recipientError}</p>
+                )}
+                {manualRecipients.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {manualRecipients.map(email => (
+                      <span key={email} className="inline-flex items-center space-x-1 px-2 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                        <span>{email}</span>
+                        <button type="button" className="text-gray-500 hover:text-red-600" onClick={() => removeManualRecipient(email)}>×</button>
+                      </span>
+                    ))}
                   </div>
-                </label>
-              ))}
+                )}
+              </div>
             </div>
           </div>
 
@@ -334,7 +397,7 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
               Email Preview
             </h4>
             <div className="space-y-2 text-sm text-blue-800 dark:text-blue-400">
-              <p>To: {formData.to.length} recipient(s)</p>
+              <p>To: {formData.to.length + manualRecipients.length} recipient(s)</p>
               <p>Subject: {formData.subject}</p>
               <div className="border-t border-blue-200 dark:border-blue-700 mt-2 pt-2">
                 <p className="font-medium">Content will include:</p>
@@ -374,7 +437,7 @@ const EmailModal: React.FC<EmailModalProps> = ({ project, budgetEntries, onClose
             </button>
             <button
               onClick={handleSend}
-              disabled={isSending || formData.to.length === 0}
+              disabled={isSending || (formData.to.length === 0 && manualRecipients.length === 0) || !!recipientError}
               className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSending ? (

@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { User, Project, BudgetEntry, BudgetCode, ViewMode, AppSettings, Notification } from '../types';
+import { User, Project, BudgetEntry, BudgetCode, ViewMode, AppSettings, Notification, Division, Unit } from '../types';
 
 interface AppContextType {
   users: User[];
+  divisions: Division[];
+  units: Unit[];
   projects: Project[];
   budgetEntries: BudgetEntry[];
   budgetCodes: BudgetCode[];
@@ -15,6 +17,12 @@ interface AppContextType {
   setCurrentView: (view: ViewMode) => void;
   setSelectedProject: (project: Project | null) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  addDivision: (division: Omit<Division, 'id' | 'createdAt'>) => void;
+  updateDivision: (id: string, updates: Partial<Division>) => void;
+  deleteDivision: (id: string) => void;
+  addUnit: (unit: Omit<Unit, 'id' | 'createdAt'>) => void;
+  updateUnit: (id: string, updates: Partial<Unit>) => void;
+  deleteUnit: (id: string) => void;
   addProject: (project: Omit<Project, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateProject: (id: string, updates: Partial<Project>) => void;
   deleteProject: (id: string) => void;
@@ -49,6 +57,8 @@ export const useApp = () => {
 // Storage keys
 const STORAGE_KEYS = {
   USERS: 'pcr_users',
+  DIVISIONS: 'pcr_divisions',
+  UNITS: 'pcr_units',
   PROJECTS: 'pcr_projects',
   BUDGET_ENTRIES: 'pcr_budget_entries',
   BUDGET_CODES: 'pcr_budget_codes',
@@ -216,6 +226,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       endDate: '2024-03-15',
       budget: 200000,
       spent: 74000,
+      unitId: 'u1',
       assignedUsers: ['2', '3'],
       budgetCodes: ['1', '2'],
       createdBy: '1',
@@ -232,6 +243,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       endDate: '2024-06-01',
       budget: 480000,
       spent: 20000,
+      unitId: 'u2',
       assignedUsers: ['3', '4'],
       budgetCodes: ['1', '3'],
       createdBy: '1',
@@ -248,6 +260,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       endDate: '2024-03-31',
       budget: 100000,
       spent: 99200,
+      unitId: 'u3',
       assignedUsers: ['2'],
       budgetCodes: ['2'],
       createdBy: '1',
@@ -260,6 +273,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     {
       id: '1',
       projectId: '1',
+      unitId: 'u1',
+      divisionId: 'd1',
       budgetCodeId: '1',
       description: 'UI/UX Design Services',
       amount: 34000,
@@ -272,6 +287,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     {
       id: '2',
       projectId: '1',
+      unitId: 'u1',
+      divisionId: 'd1',
       budgetCodeId: '1',
       description: 'Development Tools License',
       amount: 8000,
@@ -284,6 +301,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     {
       id: '3',
       projectId: '2',
+      unitId: 'u2',
+      divisionId: 'd1',
       budgetCodeId: '1',
       description: 'Market Research',
       amount: 20000,
@@ -296,6 +315,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     {
       id: '4',
       projectId: '3',
+      unitId: 'u3',
+      divisionId: 'd2',
       budgetCodeId: '2',
       description: 'Google Ads Campaign',
       amount: 60000,
@@ -308,6 +329,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     {
       id: '5',
       projectId: '1',
+      unitId: 'u1',
+      divisionId: 'd1',
       budgetCodeId: '1',
       description: 'Frontend Development',
       amount: 32000,
@@ -320,6 +343,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     {
       id: '6',
       projectId: '3',
+      unitId: 'u3',
+      divisionId: 'd2',
       budgetCodeId: '2',
       description: 'Social Media Marketing',
       amount: 25000,
@@ -332,6 +357,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     {
       id: '7',
       projectId: '3',
+      unitId: 'u3',
+      divisionId: 'd2',
       budgetCodeId: '2',
       description: 'Content Creation',
       amount: 14200,
@@ -341,6 +368,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdBy: '2',
       createdAt: '2024-03-15T00:00:00Z'
     }
+  ];
+
+  const defaultDivisions: Division[] = [
+    { id: 'd1', name: 'Corporate Services', createdBy: '1', createdAt: '2024-01-01T00:00:00Z' },
+    { id: 'd2', name: 'Marketing', createdBy: '1', createdAt: '2024-01-01T00:00:00Z' }
+  ];
+
+  const defaultUnits: Unit[] = [
+    { id: 'u1', name: 'IT Unit', divisionId: 'd1', createdBy: '1', createdAt: '2024-01-01T00:00:00Z' },
+    { id: 'u2', name: 'Product Unit', divisionId: 'd1', createdBy: '1', createdAt: '2024-01-01T00:00:00Z' },
+    { id: 'u3', name: 'Digital Marketing Unit', divisionId: 'd2', createdBy: '1', createdAt: '2024-01-01T00:00:00Z' }
   ];
 
   // Initialize state with persistent data
@@ -354,6 +392,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [budgetCodes, setBudgetCodes] = useState<BudgetCode[]>(() => 
     loadFromStorage(STORAGE_KEYS.BUDGET_CODES, defaultBudgetCodes)
+  );
+
+  const [divisions, setDivisions] = useState<Division[]>(() =>
+    loadFromStorage(STORAGE_KEYS.DIVISIONS, defaultDivisions)
+  );
+
+  const [units, setUnits] = useState<Unit[]>(() =>
+    loadFromStorage(STORAGE_KEYS.UNITS, defaultUnits)
   );
 
   const [projects, setProjects] = useState<Project[]>(() => 
@@ -384,6 +430,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     debouncedSaveBudgetCodes(budgetCodes);
   }, [budgetCodes, debouncedSaveBudgetCodes]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.DIVISIONS, divisions);
+  }, [divisions]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.UNITS, units);
+  }, [units]);
+  const addDivision = (divisionData: Omit<Division, 'id' | 'createdAt'>) => {
+    const newDivision: Division = { ...divisionData, id: Date.now().toString(), createdAt: new Date().toISOString() };
+    setDivisions(prev => [...prev, newDivision]);
+  };
+
+  const updateDivision = (id: string, updates: Partial<Division>) => {
+    setDivisions(prev => prev.map(d => (d.id === id ? { ...d, ...updates } : d)));
+  };
+
+  const deleteDivision = (id: string) => {
+    setDivisions(prev => prev.filter(d => d.id !== id));
+    // Cascade: remove units under this division and unlink from projects/entries
+    const unitIds = units.filter(u => u.divisionId === id).map(u => u.id);
+    setUnits(prev => prev.filter(u => u.divisionId !== id));
+    setProjects(prev => prev.map(p => (unitIds.includes(p.unitId) ? { ...p, unitId: '' } : p)));
+    setBudgetEntries(prev => prev.map(e => (e.divisionId === id ? { ...e, divisionId: undefined } : e)));
+  };
+
+  const addUnit = (unitData: Omit<Unit, 'id' | 'createdAt'>) => {
+    const newUnit: Unit = { ...unitData, id: Date.now().toString(), createdAt: new Date().toISOString() };
+    setUnits(prev => [...prev, newUnit]);
+  };
+
+  const updateUnit = (id: string, updates: Partial<Unit>) => {
+    setUnits(prev => prev.map(u => (u.id === id ? { ...u, ...updates } : u)));
+  };
+
+  const deleteUnit = (id: string) => {
+    setUnits(prev => prev.filter(u => u.id !== id));
+    setProjects(prev => prev.map(p => (p.unitId === id ? { ...p, unitId: '' } : p)));
+    setBudgetEntries(prev => prev.map(e => (e.unitId === id ? { ...e, unitId: undefined } : e)));
+  };
 
   useEffect(() => {
     debouncedSaveNotifications(notifications);
@@ -610,6 +696,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addBudgetEntry = (entryData: Omit<BudgetEntry, 'id' | 'createdAt'>) => {
     const newEntry: BudgetEntry = {
       ...entryData,
+      unitId: entryData.unitId ?? projects.find(p => p.id === entryData.projectId)?.unitId,
+      divisionId: entryData.divisionId ?? units.find(u => u.id === (projects.find(p => p.id === entryData.projectId)?.unitId || ''))?.divisionId,
       id: Date.now().toString(),
       createdAt: new Date().toISOString()
     };
@@ -803,6 +891,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider value={{
       users,
+      divisions,
+      units,
       projects,
       budgetEntries,
       budgetCodes,
@@ -814,6 +904,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentView,
       setSelectedProject,
       setSidebarCollapsed,
+      addDivision,
+      updateDivision,
+      deleteDivision,
+      addUnit,
+      updateUnit,
+      deleteUnit,
       addProject,
       updateProject,
       deleteProject,

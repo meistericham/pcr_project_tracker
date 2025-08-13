@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Project, BudgetEntry, BudgetCode, User } from '../types';
 import { formatMYR } from '../utils/currency';
+import { formatDate } from '../utils/date';
 
 export interface ReportData {
   projects: Project[];
@@ -41,7 +42,7 @@ export class PDFReportGenerator {
 
     // Add date
     this.doc.setFontSize(10);
-    this.doc.text(`Generated on: ${new Date().toLocaleDateString()}`, this.margin, this.currentY);
+    this.doc.text(`Generated on: ${formatDate(new Date().toISOString(), 'DD/MM/YYYY')}`, this.margin, this.currentY);
     this.currentY += 15;
   }
 
@@ -149,7 +150,7 @@ export class PDFReportGenerator {
       const project = data.projects.find(p => p.id === entry.projectId);
       const budgetCode = data.budgetCodes.find(bc => bc.id === entry.budgetCodeId);
       return [
-        new Date(entry.date).toLocaleDateString(),
+        formatDate(entry.date, 'DD/MM/YYYY'),
         project?.name || 'Unknown Project',
         budgetCode?.code || 'No Code',
         entry.description,
@@ -224,7 +225,7 @@ export class PDFReportGenerator {
         const transactionData = codeEntries.slice(0, 10).map(entry => {
           const project = data.projects.find(p => p.id === entry.projectId);
           return [
-            new Date(entry.date).toLocaleDateString(),
+            formatDate(entry.date, 'DD/MM/YYYY'),
             project?.name || 'Unknown',
             entry.description,
             entry.category,
@@ -256,8 +257,8 @@ export class PDFReportGenerator {
       ['Project Name', project.name],
       ['Status', project.status.replace('_', ' ').toUpperCase()],
       ['Priority', project.priority.toUpperCase()],
-      ['Start Date', new Date(project.startDate).toLocaleDateString()],
-      ['End Date', new Date(project.endDate).toLocaleDateString()],
+      ['Start Date', formatDate(project.startDate, 'DD/MM/YYYY')],
+      ['End Date', formatDate(project.endDate, 'DD/MM/YYYY')],
       ['Total Budget', formatMYR(project.budget)],
       ['Amount Spent', formatMYR(project.spent)],
       ['Remaining Budget', formatMYR(project.budget - project.spent)],
@@ -320,10 +321,10 @@ export class PDFReportGenerator {
     // Project Transactions
     this.addSection('Project Transactions');
     const projectEntries = data.budgetEntries.filter(entry => entry.projectId === project.id);
-    const transactionData = projectEntries.map(entry => {
+      const transactionData = projectEntries.map(entry => {
       const budgetCode = data.budgetCodes.find(bc => bc.id === entry.budgetCodeId);
       return [
-        new Date(entry.date).toLocaleDateString(),
+          formatDate(entry.date, 'DD/MM/YYYY'),
         budgetCode?.code || 'No Code',
         entry.description,
         entry.category,

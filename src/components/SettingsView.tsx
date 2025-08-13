@@ -28,10 +28,12 @@ import PasswordChangeModal from './PasswordChangeModal';
 import NotificationTest from './NotificationTest';
 
 const SettingsView = () => {
-  const { settings, updateSettings } = useApp();
+  const { settings, updateSettings, divisions, units, addDivision, deleteDivision, addUnit, deleteUnit } = useApp();
   const { currentUser } = useAuth();
   const { theme, setTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<'general' | 'budget' | 'notifications' | 'security' | 'backup' | 'database' | 'integrations'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'budget' | 'notifications' | 'security' | 'backup' | 'database' | 'integrations' | 'categories'>('general');
+  const [newDivisionName, setNewDivisionName] = useState('');
+  const [newUnit, setNewUnit] = useState({ name: '', divisionId: '' });
   const [hasChanges, setHasChanges] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
@@ -75,7 +77,8 @@ const SettingsView = () => {
     { id: 'notifications', label: 'Notifications', icon: Bell, adminOnly: true },
     { id: 'backup', label: 'Backup', icon: Database, adminOnly: true },
     { id: 'database', label: 'Database Setup', icon: Database, adminOnly: true },
-    { id: 'integrations', label: 'Integrations', icon: FileSpreadsheet, adminOnly: true }
+    { id: 'integrations', label: 'Integrations', icon: FileSpreadsheet, adminOnly: true },
+    { id: 'categories', label: 'Categories', icon: Building2, adminOnly: true }
   ];
 
   const availableTabs = tabs.filter(tab => !tab.adminOnly || isSuperAdmin);
@@ -559,6 +562,89 @@ const SettingsView = () => {
     </div>
   );
 
+  const renderCategorySettings = () => (
+    <div className="space-y-6">
+      {/* Divisions */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <Building2 className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Manage Divisions</h3>
+          </div>
+          {!isSuperAdmin && <span className="text-xs text-gray-500">Super Admin only</span>}
+        </div>
+        {isSuperAdmin && (
+          <div className="flex items-center space-x-2 mb-4">
+            <input
+              type="text"
+              value={newDivisionName}
+              onChange={(e) => setNewDivisionName(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+              placeholder="New division name"
+            />
+            <button
+              onClick={() => { if (newDivisionName.trim()) { addDivision({ name: newDivisionName.trim(), createdBy: '1' }); setNewDivisionName(''); } }}
+              className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >Add</button>
+          </div>
+        )}
+        <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+          {divisions.map(d => (
+            <li key={d.id} className="flex items-center justify-between py-2">
+              <span className="text-sm text-gray-900 dark:text-white">{d.name}</span>
+              {isSuperAdmin && (
+                <button onClick={() => deleteDivision(d.id)} className="text-xs text-red-600 hover:underline">Delete</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Units */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <Building2 className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Manage Units</h3>
+        </div>
+        {isSuperAdmin && (
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <input
+              type="text"
+              value={newUnit.name}
+              onChange={(e) => setNewUnit(prev => ({ ...prev, name: e.target.value }))}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+              placeholder="Unit name"
+            />
+            <select
+              value={newUnit.divisionId}
+              onChange={(e) => setNewUnit(prev => ({ ...prev, divisionId: e.target.value }))}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+            >
+              <option value="">Select division</option>
+              {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <div className="col-span-2">
+              <button
+                onClick={() => { if (newUnit.name.trim() && newUnit.divisionId) { addUnit({ name: newUnit.name.trim(), divisionId: newUnit.divisionId, createdBy: '1' }); setNewUnit({ name: '', divisionId: '' }); } }}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >Add Unit</button>
+            </div>
+          </div>
+        )}
+        <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+          {units.map(u => (
+            <li key={u.id} className="flex items-center justify-between py-2">
+              <span className="text-sm text-gray-900 dark:text-white">{u.name} <span className="text-xs text-gray-500">({divisions.find(d => d.id === u.divisionId)?.name || '—'})</span></span>
+              {isSuperAdmin && (
+                <button onClick={() => deleteUnit(u.id)} className="text-xs text-red-600 hover:underline">Delete</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+
   return (
     <div className="w-full h-full">
       <div className="p-6">
@@ -613,6 +699,7 @@ const SettingsView = () => {
             {activeTab === 'backup' && renderBackupSettings()}
             {activeTab === 'database' && renderDatabaseSettings()}
             {activeTab === 'integrations' && renderIntegrationsSettings()}
+            {activeTab === 'categories' && renderCategorySettings()}
           </div>
         </div>
       </div>

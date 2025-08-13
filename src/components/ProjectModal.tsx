@@ -11,7 +11,7 @@ interface ProjectModalProps {
 }
 
 const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) => {
-  const { addProject, updateProject, users, budgetCodes } = useApp();
+  const { addProject, updateProject, users, budgetCodes, divisions, units } = useApp();
   const { currentUser } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
@@ -22,7 +22,9 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) => {
     endDate: '',
     budget: '',
     assignedUsers: [] as string[],
-    budgetCodes: [] as string[]
+    budgetCodes: [] as string[],
+    divisionId: '',
+    unitId: ''
   });
 
   const activeBudgetCodes = budgetCodes.filter(code => code.isActive);
@@ -40,10 +42,14 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) => {
         endDate: project.endDate,
         budget: project.budget.toString(),
         assignedUsers: project.assignedUsers,
-        budgetCodes: project.budgetCodes || []
+        budgetCodes: project.budgetCodes || [],
+        unitId: project.unitId,
+        divisionId: units.find(u => u.id === project.unitId)?.divisionId || ''
       });
     }
-  }, [project]);
+  }, [project, units]);
+
+  const filteredUnits = units.filter(u => !formData.divisionId || u.divisionId === formData.divisionId);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +65,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) => {
       spent: project?.spent || 0,
       assignedUsers: formData.assignedUsers,
       budgetCodes: formData.budgetCodes,
+      unitId: formData.unitId,
       createdBy: currentUser?.id || '1'
     };
 
@@ -213,6 +220,38 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ project, onClose }) => {
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Division and Unit */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Division</label>
+              <select
+                required
+                value={formData.divisionId}
+                onChange={(e) => setFormData(prev => ({ ...prev, divisionId: e.target.value, unitId: '' }))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="">Select division</option>
+                {divisions.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Unit</label>
+              <select
+                required
+                value={formData.unitId}
+                onChange={(e) => setFormData(prev => ({ ...prev, unitId: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="">Select unit</option>
+                {filteredUnits.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
               </select>
             </div>
           </div>

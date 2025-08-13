@@ -16,6 +16,7 @@ import {
 import { useApp } from '../contexts/AppContext';
 import { Project } from '../types';
 import { formatMYR } from '../utils/currency';
+import { formatDate } from '../utils/date';
 
 interface ProjectDetailModalProps {
   project: Project;
@@ -133,13 +134,13 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                   <div>
                     <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Start Date</label>
                     <p className="text-sm text-gray-900 dark:text-white mt-1">
-                      {new Date(project.startDate).toLocaleDateString()}
+                      {formatDate(project.startDate, 'DD/MM/YYYY')}
                     </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-600 dark:text-gray-400">End Date</label>
                     <p className="text-sm text-gray-900 dark:text-white mt-1">
-                      {new Date(project.endDate).toLocaleDateString()}
+                      {formatDate(project.endDate, 'DD/MM/YYYY')}
                     </p>
                   </div>
                 </div>
@@ -242,7 +243,7 @@ const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClos
                             <div className="flex items-center space-x-4 mt-1 text-xs text-gray-500 dark:text-gray-400">
                               <div className="flex items-center space-x-1">
                                 <Calendar className="h-3 w-3" />
-                                <span>{new Date(entry.date).toLocaleDateString()}</span>
+                                <span>{formatDate(entry.date, 'DD/MM/YYYY')}</span>
                               </div>
                               {budgetCode && (
                                 <div className="flex items-center space-x-1">

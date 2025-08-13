@@ -1,4 +1,3 @@
-import React from 'react';
 import { 
   FolderOpen, 
   DollarSign, 
@@ -216,34 +215,42 @@ const Sidebar = () => {
                 </div>
               )}
             </div>
-          )}
-
-          {/* User Info */}
-          <div className={`mt-4 lg:mt-6 mx-4 p-3 lg:p-4 bg-gray-50 dark:bg-gray-800 rounded-xl ${sidebarCollapsed ? 'lg:mx-2' : ''}`}>
-            <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
-              <div className="w-8 lg:w-10 h-8 lg:h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-xs lg:text-sm font-medium">{currentUser?.initials}</span>
-              </div>
-              {!sidebarCollapsed && (
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    {currentUser?.name}
-                  </p>
-                  <div className="flex items-center space-x-1">
-                    {currentUser?.role === 'super_admin' && (
-                      <Shield className="h-3 w-3 text-red-500" />
-                    )}
-                    <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                      {currentUser?.role.replace('_', ' ')}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
+            )}
+              
+            {/* User Info */}
+             <div className={`mt-4 lg:mt-6 mx-4 p-3 lg:p-4 bg-gray-50 dark:bg-gray-800 rounded-xl ${sidebarCollapsed ? 'lg:mx-2' : ''}`}>
+               <div className={`flex items-center ${sidebarCollapsed ? 'lg:justify-center' : 'space-x-3'}`}>
+                 <div className="w-8 lg:w-10 h-8 lg:h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                   <span className="text-white text-xs lg:text-sm font-medium">{currentUser?.initials}</span>
+                 </div>
+                 {!sidebarCollapsed && (
+                   <div className="flex-1 min-w-0">
+                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                       {currentUser?.name}
+                     </p>
+                     <div className="flex items-center space-x-1">
+                       {currentUser?.role === 'super_admin' && (
+                         <Shield className="h-3 w-3 text-red-500" />
+                       )}
+                       <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                         {currentUser?.role.replace('_', ' ')}
+                       </p>
+                     </div>
+                   </div>
+                 )}
+               </div>
+             </div>
+           </div>
+          
+           {!sidebarCollapsed && (
+             <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+               <p className="text-xs text-gray-500 dark:text-gray-400">
+                 Develop by Mohd Hisyamudin using AI Coding Assistant
+               </p>
+             </div>
+           )}
+         </div>
+       </>
   );
 };
 

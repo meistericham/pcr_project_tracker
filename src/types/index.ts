@@ -8,6 +8,21 @@ export interface User {
   createdAt: string;
 }
 
+export interface Division {
+  id: string;
+  name: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface Unit {
+  id: string;
+  name: string;
+  divisionId: string;
+  createdBy: string;
+  createdAt: string;
+}
+
 export interface BudgetCode {
   id: string;
   code: string;
@@ -25,6 +40,7 @@ export interface Project {
   id: string;
   name: string;
   description: string;
+  unitId: string; // Must belong to a Unit
   status: 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled';
   priority: 'low' | 'medium' | 'high';
   startDate: string;
@@ -41,6 +57,8 @@ export interface Project {
 export interface BudgetEntry {
   id: string;
   projectId: string;
+  unitId?: string; // Optional direct link; defaults from project
+  divisionId?: string; // Optional direct link; defaults from unit
   budgetCodeId?: string; // Optional budget code reference
   description: string;
   amount: number;

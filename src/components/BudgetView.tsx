@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { 
   Plus, 
   DollarSign, 
   TrendingUp, 
   TrendingDown,
   Calendar,
-  Filter,
   Edit3,
   Trash2,
   PieChart,
@@ -18,6 +17,7 @@ import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import { BudgetEntry } from '../types';
 import { formatMYR } from '../utils/currency';
+import { formatDate } from '../utils/date';
 import BudgetModal from './BudgetModal';
 import ProjectSpendingChart from './charts/ProjectSpendingChart';
 import MonthlySpendingChart from './charts/MonthlySpendingChart';
@@ -25,17 +25,26 @@ import YearlySpendingChart from './charts/YearlySpendingChart';
 import CategorySpendingChart from './charts/CategorySpendingChart';
 
 const BudgetView = () => {
-  const { projects, budgetEntries, budgetCodes, deleteBudgetEntry, setCurrentView } = useApp();
+  const { projects, budgetEntries, budgetCodes, deleteBudgetEntry, setCurrentView, divisions, units } = useApp();
   const { currentUser } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<BudgetEntry | null>(null);
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [activeChart, setActiveChart] = useState<'project' | 'monthly' | 'yearly' | 'category'>('project');
   const [activeTab, setActiveTab] = useState<'overview' | 'codes'>('overview');
+  const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  const [selectedUnit, setSelectedUnit] = useState<string>('all');
 
-  const filteredEntries = selectedProject === 'all' 
-    ? budgetEntries 
-    : budgetEntries.filter(entry => entry.projectId === selectedProject);
+  const filteredUnits = selectedDivision === 'all' ? units : units.filter(u => u.divisionId === selectedDivision);
+  const filteredProjects = projects.filter(p =>
+    (selectedDivision === 'all' || filteredUnits.some(u => u.id === p.unitId)) &&
+    (selectedUnit === 'all' || p.unitId === selectedUnit)
+  );
+  const filteredEntries = budgetEntries.filter(entry =>
+    (selectedProject === 'all' || entry.projectId === selectedProject) &&
+    (selectedDivision === 'all' || filteredUnits.some(u => u.id === (projects.find(p => p.id === entry.projectId)?.unitId))) &&
+    (selectedUnit === 'all' || projects.find(p => p.id === entry.projectId)?.unitId === selectedUnit)
+  );
 
   const totalExpenses = filteredEntries
     .filter(entry => entry.type === 'expense')
@@ -289,16 +298,34 @@ const BudgetView = () => {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               Budget Overview
             </h2>
-            <select
-              value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
-              className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              <option value="all">All Projects</option>
-              {projects.map(project => (
-                <option key={project.id} value={project.id}>{project.name}</option>
-              ))}
-            </select>
+            <div className="flex items-center space-x-2">
+              <select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="all">All Projects</option>
+                {filteredProjects.map(project => (
+                  <option key={project.id} value={project.id}>{project.name}</option>
+                ))}
+              </select>
+              <select
+                value={selectedDivision}
+                onChange={(e) => { setSelectedDivision(e.target.value); setSelectedUnit('all'); }}
+                className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="all">All Divisions</option>
+                {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              <select
+                value={selectedUnit}
+                onChange={(e) => setSelectedUnit(e.target.value)}
+                className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                <option value="all">All Units</option>
+                {filteredUnits.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
           </div>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
             {/* Tab Navigation */}
@@ -483,7 +510,7 @@ const BudgetView = () => {
                         <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                           <div className="flex items-center space-x-1">
                             <Calendar className="h-3 w-3" />
-                            <span>{new Date(entry.date).toLocaleDateString()}</span>
+                            <span>{formatDate(entry.date, 'DD/MM/YYYY')}</span>
                           </div>
                           {entry.budgetCodeId && (
                             <div className="flex items-center space-x-1">
@@ -607,7 +634,7 @@ const BudgetView = () => {
                           <div className="flex items-center space-x-2">
                             <Calendar className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                             <span className="text-sm text-gray-600 dark:text-gray-400">
-                              {new Date(entry.date).toLocaleDateString()}
+                              {formatDate(entry.date, 'DD/MM/YYYY')}
                             </span>
                           </div>
                         </td>
