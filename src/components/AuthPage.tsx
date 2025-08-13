@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Building2 } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Building2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const AuthPage: React.FC = () => {
-  const { login } = useAuth();
+  const { login, loginAttempts, isLocked } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -38,6 +38,38 @@ const AuthPage: React.FC = () => {
     }
   };
 
+  const getLockoutMessage = () => {
+    if (!isLocked) return null;
+    
+    const remainingAttempts = 5 - loginAttempts;
+    return (
+      <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg mb-4">
+        <div className="flex items-center space-x-2">
+          <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+          <p className="text-sm text-red-600 dark:text-red-400">
+            Too many failed attempts. Please try again later.
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  const getAttemptsWarning = () => {
+    if (loginAttempts === 0 || isLocked) return null;
+    
+    const remainingAttempts = 5 - loginAttempts;
+    return (
+      <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg mb-4">
+        <div className="flex items-center space-x-2">
+          <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+          <p className="text-sm text-yellow-600 dark:text-yellow-400">
+            {remainingAttempts} login attempt{remainingAttempts !== 1 ? 's' : ''} remaining
+          </p>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -56,6 +88,9 @@ const AuthPage: React.FC = () => {
 
         {/* Auth Form */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-8">
+          {getLockoutMessage()}
+          {getAttemptsWarning()}
+          
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Name field for sign up */}
             {isSignUp && (
@@ -91,6 +126,7 @@ const AuthPage: React.FC = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   placeholder="Enter your email"
+                  disabled={isLocked}
                 />
               </div>
             </div>
@@ -109,11 +145,13 @@ const AuthPage: React.FC = () => {
                   onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                   className="w-full pl-10 pr-12 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   placeholder="Enter your password"
+                  disabled={isLocked}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  disabled={isLocked}
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
@@ -135,6 +173,7 @@ const AuthPage: React.FC = () => {
                     onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     placeholder="Confirm your password"
+                    disabled={isLocked}
                   />
                 </div>
               </div>
@@ -150,7 +189,7 @@ const AuthPage: React.FC = () => {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isLocked}
               className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-lg hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
             >
               {isLoading ? (
@@ -176,6 +215,7 @@ const AuthPage: React.FC = () => {
                   setFormData({ name: '', email: '', password: '', confirmPassword: '' });
                 }}
                 className="ml-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+                disabled={isLocked}
               >
                 {isSignUp ? 'Sign in' : 'Sign up'}
               </button>

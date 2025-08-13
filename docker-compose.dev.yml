@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # PCR Project Tracker Frontend (Development)
+  pcr-tracker-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:5173"
+    environment:
+      - NODE_ENV=development
+      - VITE_SUPABASE_URL=http://localhost:3001
+      - VITE_SUPABASE_ANON_KEY=your-anon-key
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - pcr-network
+    restart: unless-stopped
+    command: npm run dev -- --host 0.0.0.0
+
+  # Supabase Database (PostgreSQL)
+  supabase-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: pcr_tracker
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - supabase_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - pcr-network
+    restart: unless-stopped
+
+  # Mail Server (for development)
+  mail:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - pcr-network
+    restart: unless-stopped
+
+volumes:
+  supabase_data:
+    driver: local
+
+networks:
+  pcr-network:
+    driver: bridge

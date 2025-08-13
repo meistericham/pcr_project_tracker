@@ -10,6 +10,7 @@ import BudgetView from './components/BudgetView';
 import UsersView from './components/UsersView';
 import BudgetCodesView from './components/BudgetCodesView';
 import SettingsView from './components/SettingsView';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const AppContent = () => {
   const { currentView } = useApp();
@@ -37,7 +38,9 @@ const AppContent = () => {
       <div className="flex-1 flex flex-col min-w-0">
         <TopNavigation />
         <div className="flex-1 overflow-auto relative">
-          {renderCurrentView()}
+          <ErrorBoundary>
+            {renderCurrentView()}
+          </ErrorBoundary>
         </div>
       </div>
     </div>
@@ -71,11 +74,13 @@ const AuthenticatedApp = () => {
 
 function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <AuthenticatedApp />
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <AuthenticatedApp />
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

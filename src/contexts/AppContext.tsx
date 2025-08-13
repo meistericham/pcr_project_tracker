@@ -75,11 +75,28 @@ const loadFromStorage = (key: string, defaultValue: any) => {
   }
 };
 
+// Debounced save function
+const createDebouncedSave = (key: string) => {
+  let timeoutId: NodeJS.Timeout;
+  return (data: any) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => saveToStorage(key, data), 300);
+  };
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuth();
   const [currentView, setCurrentView] = useState<ViewMode>('projects');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Create debounced save functions
+  const debouncedSaveUsers = React.useMemo(() => createDebouncedSave(STORAGE_KEYS.USERS), []);
+  const debouncedSaveProjects = React.useMemo(() => createDebouncedSave(STORAGE_KEYS.PROJECTS), []);
+  const debouncedSaveBudgetEntries = React.useMemo(() => createDebouncedSave(STORAGE_KEYS.BUDGET_ENTRIES), []);
+  const debouncedSaveBudgetCodes = React.useMemo(() => createDebouncedSave(STORAGE_KEYS.BUDGET_CODES), []);
+  const debouncedSaveNotifications = React.useMemo(() => createDebouncedSave(STORAGE_KEYS.NOTIFICATIONS), []);
+  const debouncedSaveSettings = React.useMemo(() => createDebouncedSave(STORAGE_KEYS.SETTINGS), []);
 
   // Default settings
   const defaultSettings: AppSettings = {
@@ -351,30 +368,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadFromStorage(STORAGE_KEYS.NOTIFICATIONS, [])
   );
 
-  // Save to localStorage whenever state changes
+  // Save to localStorage whenever state changes (optimized with debouncing)
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.USERS, users);
-  }, [users]);
+    debouncedSaveUsers(users);
+  }, [users, debouncedSaveUsers]);
 
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.PROJECTS, projects);
-  }, [projects]);
+    debouncedSaveProjects(projects);
+  }, [projects, debouncedSaveProjects]);
 
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.BUDGET_ENTRIES, budgetEntries);
-  }, [budgetEntries]);
+    debouncedSaveBudgetEntries(budgetEntries);
+  }, [budgetEntries, debouncedSaveBudgetEntries]);
 
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.BUDGET_CODES, budgetCodes);
-  }, [budgetCodes]);
+    debouncedSaveBudgetCodes(budgetCodes);
+  }, [budgetCodes, debouncedSaveBudgetCodes]);
 
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.NOTIFICATIONS, notifications);
-  }, [notifications]);
+    debouncedSaveNotifications(notifications);
+  }, [notifications, debouncedSaveNotifications]);
 
   useEffect(() => {
-    saveToStorage(STORAGE_KEYS.SETTINGS, settings);
-  }, [settings]);
+    debouncedSaveSettings(settings);
+  }, [settings, debouncedSaveSettings]);
 
   // Notification functions
   const addNotification = (notificationData: Omit<Notification, 'id' | 'createdAt'>) => {
